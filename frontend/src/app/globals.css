@@ -1,0 +1,326 @@
+@import "tailwindcss";
+
+/* `dark:` utilities follow the in-app theme switch (html[data-theme="dark"]), not the OS setting. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+
+  /* Every colour the UI uses is a token, so the dark theme only has to redefine these (see below). */
+  --color-ink: #222222;
+  --color-on-ink: #ffffff;
+  --color-muted: #6b6b6b;
+  --color-line: #e6e6e6;
+  --color-paper: #ffffff;
+  --color-surface: #f6f6f6;
+  --color-canvas: #f7f7f7;
+  --color-edge: #c8c8c8;
+  --color-edge-strong: #8a8a8a;
+  --color-faint: #b0b0b0;
+  --color-hover: #ebebeb;
+  --color-press: #e2e2e2;
+  --color-brand: #ff385c;
+  --color-brand-dark: #e00b41;
+  --color-brand-soft: #fff0f3;
+  --color-brand-disabled: #f0b4be;
+  --color-ink-disabled: #b5b5b5;
+  --color-success: #0f8a5f;
+  --color-warn: #b45309;
+  --color-danger: #b42318;
+  --color-danger-solid: #b42318;
+  --color-danger-ink: #912018;
+  --color-danger-soft: #fdf1f0;
+  --color-danger-edge: #f0b8b3;
+  --color-ok-soft: #e7f6ef;
+  --color-ok-ink: #0b6b49;
+  --color-amber-soft: #fdf3e1;
+  --color-amber-ink: #8a5a00;
+  --color-blue-soft: #e8f1fd;
+  --color-blue-ink: #1d4f9c;
+
+  --radius-card: 16px;
+  --radius-field: 12px;
+
+  --shadow-pop: 0 8px 30px rgb(0 0 0 / 0.12);
+  --shadow-card: 0 6px 20px rgb(0 0 0 / 0.1);
+  --shadow-search: 0 3px 10px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-search-hover: 0 6px 18px rgb(0 0 0 / 0.14), 0 1px 2px rgb(0 0 0 / 0.06);
+
+  --breakpoint-xs: 30rem;
+  --breakpoint-3xl: 112rem;
+
+  --animate-fade-in: fade-in 0.18s ease-out both;
+  --animate-drop-in: drop-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-fade-out: fade-out 0.15s ease-in both;
+  --animate-modal-in: modal-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-modal-out: modal-out 0.15s ease-in both;
+  --animate-sheet-in: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-sheet-out: sheet-out 0.2s ease-in both;
+  --animate-pop-in: pop-in 0.14s ease-out both;
+  --animate-toast-in: toast-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-heart: heart-pop 0.32s ease-out;
+  --animate-ring: ring-in 0.45s cubic-bezier(0.2, 1.2, 0.3, 1) both;
+  --animate-spin-fast: spin 0.8s linear infinite;
+
+  @keyframes fade-in { from { opacity: 0; } }
+  @keyframes drop-in { from { opacity: 0; transform: translateY(-10px); } }
+  @keyframes fade-out { to { opacity: 0; } }
+  @keyframes modal-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } }
+  @keyframes modal-out { to { opacity: 0; transform: translateY(8px) scale(0.99); } }
+  @keyframes sheet-in { from { transform: translateY(100%); } }
+  @keyframes sheet-out { to { transform: translateY(100%); } }
+  @keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
+  @keyframes heart-pop { 0% { transform: scale(1); } 40% { transform: scale(1.3); } 100% { transform: scale(1); } }
+  @keyframes ring-in { from { transform: scale(0.6); opacity: 0; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+}
+
+/* ---------- dark theme: same tokens, new values ---------- */
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-ink: #f2f2f2;
+  --color-on-ink: #161616;
+  --color-muted: #a6a6a6;
+  --color-line: #383838;
+  --color-paper: #1b1b1b;
+  --color-surface: #272727;
+  --color-canvas: #202020;
+  --color-edge: #555555;
+  --color-edge-strong: #7a7a7a;
+  --color-faint: #7d7d7d;
+  --color-hover: #303030;
+  --color-press: #3a3a3a;
+  --color-brand-soft: #3d1f27;
+  --color-brand-disabled: #6a2d3a;
+  --color-ink-disabled: #5a5a5a;
+  --color-success: #34d399;
+  --color-warn: #f0b24b;
+  --color-danger: #ff8d84;
+  --color-danger-ink: #ffb4ab;
+  --color-danger-soft: #3a1f1d;
+  --color-danger-edge: #7a3b36;
+  --color-ok-soft: #153828;
+  --color-ok-ink: #6fe0ac;
+  --color-amber-soft: #3a2f13;
+  --color-amber-ink: #f0c36d;
+  --color-blue-soft: #182b47;
+  --color-blue-ink: #93bcff;
+  --shadow-pop: 0 8px 30px rgb(0 0 0 / 0.55);
+  --shadow-card: 0 6px 20px rgb(0 0 0 / 0.45);
+  --shadow-search: 0 3px 10px rgb(0 0 0 / 0.4), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-search-hover: 0 6px 18px rgb(0 0 0 / 0.55), 0 1px 2px rgb(0 0 0 / 0.3);
+}
+/* The OpenStreetMap embed is a light map: invert it so it doesn't glare, keeping it readable. */
+html[data-theme="dark"] iframe[title^="Map showing"] {
+  filter: invert(0.92) hue-rotate(180deg) brightness(0.95) contrast(0.95);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  button:not(:disabled),
+  [role="button"] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  ::selection {
+    background: var(--color-brand-soft);
+  }
+}
+
+@layer utilities {
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .container-page {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 1760px;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 640px) {
+    .container-page {
+      padding-inline: 2.5rem;
+    }
+  }
+  @media (min-width: 1280px) {
+    .container-page {
+      padding-inline: 5rem;
+    }
+  }
+  .container-narrow {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 1120px;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 640px) {
+    .container-narrow {
+      padding-inline: 2.5rem;
+    }
+  }
+}
+
+/* ---------- header: scroll-driven collapse of the in-page search (see Header.tsx) ---------- */
+.hdr-expander {
+  height: max(0px, calc(88px - var(--s, 0) * 1px));
+}
+.hdr-expander-sm {
+  height: max(0px, calc(44px - var(--s, 0) * 1px));
+}
+.hdr-fade {
+  opacity: clamp(0, calc(1 - var(--s, 0) / 44), 1);
+}
+
+/* ---------- discovery carousels ---------- */
+.carousel {
+  --visible: 2.15;
+  --gap: 12px;
+  display: flex;
+  gap: var(--gap);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  /* bleed to the page gutter so cards peek in from the edge on phones */
+  margin-inline: -1rem;
+  padding-inline: 1rem;
+  scroll-padding-inline: 1rem;
+}
+.carousel::-webkit-scrollbar {
+  display: none;
+}
+.carousel-item {
+  flex: 0 0 calc((100% - (var(--visible) - 1) * var(--gap)) / var(--visible));
+  min-width: 0;
+  scroll-snap-align: start;
+}
+@media (min-width: 640px) {
+  .carousel {
+    --visible: 3.2;
+    --gap: 16px;
+    margin-inline: -2.5rem;
+    padding-inline: 2.5rem;
+    scroll-padding-inline: 2.5rem;
+  }
+}
+@media (min-width: 1024px) {
+  .carousel {
+    --visible: 4;
+  }
+}
+@media (min-width: 1280px) {
+  .carousel {
+    --visible: 5;
+    --gap: 20px;
+    margin-inline: -5rem;
+    padding-inline: 5rem;
+    scroll-padding-inline: 5rem;
+  }
+}
+@media (min-width: 1440px) {
+  .carousel {
+    --visible: 6;
+  }
+}
+@media (min-width: 1792px) {
+  .carousel {
+    --visible: 7;
+  }
+}
+
+/* ---------- motion ---------- */
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 40;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.anim-check {
+  stroke-dasharray: 40;
+  animation: check-draw 0.45s 0.25s ease-out both;
+}
+
+@keyframes shimmer {
+  to {
+    background-position-x: -200%;
+  }
+}
+.skeleton {
+  background: linear-gradient(100deg, var(--color-surface) 30%, var(--color-hover) 50%, var(--color-surface) 70%) 0 0 / 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 8px;
+}
+
+/* Dual-thumb price slider: two stacked range inputs, only the thumbs capture the pointer */
+.range-thumb {
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  position: absolute;
+  inset-inline: 0;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+}
+.range-thumb::-webkit-slider-thumb {
+  pointer-events: auto;
+  -webkit-appearance: none;
+  height: 28px;
+  width: 28px;
+  border-radius: 9999px;
+  background: var(--color-paper);
+  border: 1px solid var(--color-faint);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  cursor: grab;
+}
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  height: 28px;
+  width: 28px;
+  border-radius: 9999px;
+  background: var(--color-paper);
+  border: 1px solid var(--color-faint);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  cursor: grab;
+}
+.range-thumb:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

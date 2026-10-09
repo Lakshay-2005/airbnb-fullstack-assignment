@@ -1,0 +1,45 @@
+# dependencies
+node_modules/
+.venv/
+venv/
+
+# build output
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# local runtime database (re-created and seeded on first start: `python seed.py`)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+
+# environment files (keep the *.example templates)
+.env
+.env.*
+!.env.example
+
+# logs and test artifacts
+*.log
+npm-debug.log*
+test-results/
+playwright-report/
+screenshots-tmp/
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/

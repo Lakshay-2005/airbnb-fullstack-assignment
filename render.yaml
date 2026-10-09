@@ -1,0 +1,44 @@
+# Render Blueprint for the FastAPI backend (the frontend is deployed separately on Vercel).
+#
+# The default below is Render's FREE web service. Its filesystem is EPHEMERAL: the SQLite file is
+# re-created and re-seeded with demo data on every restart, sleep/wake and redeploy, so anything
+# created through the app (bookings, listings, messages) is lost then. That is fine for a demo.
+#
+# For data that survives restarts, switch to a paid plan, attach a persistent disk and point
+# DATABASE_URL at it - see the commented block at the bottom.
+services:
+  - type: web
+    name: airbnb-clone-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: SECRET_KEY
+        generateValue: true
+      # Enter your Vercel production URL in the Render dashboard (no trailing slash), e.g.
+      # https://airbnb-clone-yourname.vercel.app
+      - key: CORS_ORIGINS
+        sync: false
+      # Optional: lets Vercel preview deployments call the API too.
+      - key: CORS_ORIGIN_REGEX
+        value: https://.*\.vercel\.app
+      - key: DATABASE_URL
+        value: sqlite:///./airbnb_clone.db
+      - key: AUTO_SEED
+        value: "true"
+
+# --- Persistent SQLite (paid) -----------------------------------------------------------------
+# Change `plan: free` above to `plan: starter`, set DATABASE_URL to the disk path and add:
+#
+#     disk:
+#       name: airbnb-clone-data
+#       mountPath: /var/data
+#       sizeGB: 1
+#
+# with  DATABASE_URL = sqlite:////var/data/airbnb_clone.db   (four slashes = absolute path).
+# A disk also limits the service to a single instance, which suits SQLite.
