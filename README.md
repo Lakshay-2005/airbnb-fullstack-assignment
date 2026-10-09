@@ -6,7 +6,16 @@ An Airbnb-inspired full-stack stay marketplace built with Next.js, TypeScript, T
 tier, so the first request after inactivity can take about a minute while it wakes up (see
 [SQLite persistence on Render](#sqlite-persistence-on-render)).
 
+**Source code:** <https://github.com/Lakshay-2005/airbnb-fullstack-assignment>
+
 ![Airbnb Clone home page](docs/screenshots/home-desktop.png)
+
+**At a glance**
+
+* **Product:** discover stays on curated carousels or by search → filter, sort and paginate → open a listing → get a **server-calculated quote** → coupon → **mock payment** (decline + retry) → confirmation and a **print-ready receipt** → Trips, cancellation, wishlist, reviews and guest ↔ host messaging. Hosts get a dashboard and listing CRUD with ownership checks.
+* **Money:** 48 seeded listings priced in their local currency, **15 display currencies** (default INR) with illustrative demo rates, and a per-booking currency snapshot.
+* **Engineering:** Next.js 16 · React 19 · TypeScript · Tailwind CSS v4 on **Vercel**; FastAPI · SQLAlchemy 2 · Pydantic v2 · **SQLite** on **Render**; transactional (`BEGIN IMMEDIATE`) booking creation, 106 backend tests plus frontend currency tests, typecheck, lint and production build.
+* **Jump to:** [architecture diagram](#system-overview) · [ER diagram](#entity-relationship-diagram) · [booking states](#booking-state-diagram) · [API](#api) · [testing](#testing) · [deployment](#deployment).
 
 > **Independent educational project.** This is a learning/assignment project. It is **not affiliated with,
 > endorsed by or connected to Airbnb, Inc.** "Airbnb" is a trademark of its owner; the name and pink pin
@@ -16,8 +25,8 @@ tier, so the first request after inactivity can take about a minute while it wak
 
 ## Contents
 
-[Features](#features) · [Screenshots](#screenshots) · [Tech stack](#tech-stack) · [Architecture](#architecture) ·
-[Database](#database) · [Booking lifecycle](#booking-lifecycle-and-availability) · [Currencies, pricing & coupons](#currencies-pricing-and-coupons) ·
+[Features](#features) · [Screenshots](#screenshots) · [Tech stack](#tech-stack) · [Architecture](#architecture) ([diagram](#system-overview)) ·
+[Database](#database) ([ER diagram](#entity-relationship-diagram)) · [Booking lifecycle](#booking-lifecycle-and-availability) ([states](#booking-state-diagram)) · [Currencies, pricing & coupons](#currencies-pricing-and-coupons) ·
 [API](#api) · [Demo accounts](#demo-accounts) · [Mock payment & printing](#mock-payment-and-booking-receipt) · [Local setup](#local-setup) ·
 [Testing](#testing) · [Environment variables](#environment-variables) · [Deployment](#deployment) ·
 [Demo guide](#end-to-end-demo-guide) · [Assumptions & limitations](#assumptions-and-known-limitations) · [Credits](#credits-and-licensing)
@@ -65,6 +74,56 @@ Captured from the running production build with the seeded demo data (see [Testi
 
 ## Architecture
 
+### System overview
+
+The app is two deployable pieces. The Next.js build is served by Vercel; once loaded, the React app runs in the browser and calls the
+FastAPI service **directly** over HTTPS (`NEXT_PUBLIC_API_URL`, allowed by the API's CORS settings). The API is a single process
+with one SQLite file; there is no separate database server, queue or other service.
+
+```mermaid
+flowchart TB
+    subgraph Vercel["Vercel · frontend/"]
+        NEXT["Next.js 16 build<br/>App Router · React 19 · Tailwind v4"]
+    end
+
+    subgraph Browser["Guest or host browser"]
+        direction LR
+        UI["Pages and components<br/>discovery · search · listing · checkout<br/>trips · wishlist · messages · host · receipt"]
+        STATE["AppProvider and useFetch<br/>demo user · wishlist · unread · currency rates"]
+        API["Typed API client lib/api<br/>bearer token · display currency"]
+        LS[("localStorage<br/>session token · currency · theme")]
+        UI --> STATE --> API
+        STATE -.-> LS
+    end
+
+    subgraph Render["Render · backend/ · one FastAPI process"]
+        direction TB
+        MW["CORS and JSON error handlers"]
+        RT["Routers under /api<br/>users · listings · bookings · favorites · coupons<br/>reviews · host · messages · currencies · health"]
+        SCH["Pydantic schemas<br/>request validation · response models"]
+        SVC["Service layer<br/>listings and search · availability · bookings<br/>pricing · coupons · messaging"]
+        CUR["core/currency<br/>rates · convert · format"]
+        ORM["SQLAlchemy models and sessions<br/>write_session = BEGIN IMMEDIATE"]
+        DB[("SQLite file<br/>airbnb_clone.db")]
+        BOOT["Startup lifespan<br/>create_all · run_migrations<br/>auto-seed when empty"]
+        MW --> RT --> SCH
+        RT --> SVC
+        SVC --> CUR
+        SVC --> ORM --> DB
+        BOOT --> DB
+    end
+
+    NEXT -- "serves HTML and JS" --> Browser
+    API -- "HTTPS REST JSON" --> MW
+```
+
+* **Routers stay thin.** Listings, bookings, host, messages and coupons delegate to the service layer; the small favorites, reviews and users routers run their few queries inline through SQLAlchemy.
+* **Identity** is a signed demo token (`core/security.py`) resolved by the `CurrentUser` dependency on every request; the role is always read from the database.
+* **Money** is converted only in `core/currency.py` and used by the pricing, coupon, search and booking services; the frontend formats amounts but never computes prices.
+* **Startup** (`main.py` lifespan): `init_db()` runs `create_all` and then the idempotent `ADD COLUMN` migration (`db/migrations.py`); if `AUTO_SEED=true` and there are no users, `seed.py` (with `seed_data.py` and `seed_extra.py`) fills the database. `python seed.py [--reset]` does the same from the command line.
+
+### Repository layout
+
 ```
 airbnb-clone/
 ├── frontend/                Next.js app
@@ -110,15 +169,153 @@ instead of misreading ₹12,000 as $12,000.
 
 ## Database
 
-Tables: `users`, `listings`, `listing_images`, `amenities`, `listing_amenities`, `bookings`, `payments`, `coupons`,
-`coupon_usages`, `reviews`, `favorites`, `conversations`, `messages` — foreign keys on, unique constraints, cascades.
+Thirteen tables (`users`, `listings`, `listing_images`, `amenities`, `listing_amenities`, `bookings`, `payments`, `coupons`,
+`coupon_usages`, `reviews`, `favorites`, `conversations`, `messages`) with foreign keys enforced (`PRAGMA foreign_keys=ON`), unique
+constraints and cascades. The diagram shows the key and business columns, not every column; `PK` primary key, `FK` foreign key, `UK` unique.
 
+### Entity-relationship diagram
+
+```mermaid
+erDiagram
+    USER ||--o{ LISTING : "hosts"
+    LISTING ||--o{ LISTING_IMAGE : "has photos"
+    LISTING ||--o{ LISTING_AMENITY : "offers"
+    AMENITY ||--o{ LISTING_AMENITY : "is offered in"
+    USER ||--o{ BOOKING : "books as guest"
+    LISTING ||--o{ BOOKING : "is reserved by"
+    BOOKING ||--o| PAYMENT : "is paid by"
+    BOOKING ||--o| REVIEW : "can be reviewed in"
+    USER ||--o{ REVIEW : "writes"
+    LISTING ||--o{ REVIEW : "receives"
+    COUPON ||--o{ COUPON_USAGE : "is used in"
+    USER ||--o{ COUPON_USAGE : "redeems"
+    BOOKING ||--o{ COUPON_USAGE : "applies"
+    USER ||--o{ FAVORITE : "saves"
+    LISTING ||--o{ FAVORITE : "is saved in"
+    LISTING ||--o{ CONVERSATION : "is asked about in"
+    USER ||--o{ CONVERSATION : "starts as guest"
+    USER ||--o{ CONVERSATION : "receives as host"
+    CONVERSATION ||--o{ MESSAGE : "contains"
+    USER ||--o{ MESSAGE : "sends"
+
+    USER {
+        int id PK
+        string name
+        string email UK
+        string role "GUEST or HOST"
+        string avatar
+    }
+    LISTING {
+        int id PK
+        int host_id FK
+        string title
+        string city
+        string country
+        string currency "native currency derived from country"
+        int nightly_price "whole units of currency"
+        int cleaning_fee
+        int service_fee
+        int guests_capacity
+        string property_type
+        string category
+        string status "ACTIVE, PAUSED or DELETED"
+        float rating
+        int review_count
+    }
+    LISTING_IMAGE {
+        int id PK
+        int listing_id FK
+        string image_url
+        int sort_order
+    }
+    AMENITY {
+        int id PK
+        string name UK
+    }
+    LISTING_AMENITY {
+        int listing_id PK, FK
+        int amenity_id PK, FK
+    }
+    BOOKING {
+        int id PK
+        string reference UK
+        int listing_id FK "RESTRICT"
+        int guest_id FK
+        date check_in "nights are check_in up to check_out"
+        date check_out
+        int guests
+        int nights
+        string currency "snapshot currency of every amount"
+        int subtotal
+        int cleaning_fee
+        int service_fee
+        int discount
+        int total
+        string coupon_code "applied code as text"
+        string status "PENDING, CONFIRMED, CANCELLED or COMPLETED"
+        datetime hold_expires_at "15-minute hold while PENDING"
+    }
+    PAYMENT {
+        int id PK
+        int booking_id FK, UK
+        int amount "in the booking currency"
+        string status "PENDING, SUCCESS, FAILED or REFUNDED"
+        string method "mock card_4242 or card_declined"
+        string failure_reason
+    }
+    COUPON {
+        int id PK
+        string code UK
+        string type "PERCENTAGE or FLAT"
+        int value
+        int minimum_amount "US dollars"
+        int maximum_discount "US dollars"
+        bool active
+        datetime expires_at
+        int usage_limit
+        int usage_count
+    }
+    COUPON_USAGE {
+        int id PK
+        int coupon_id FK "unique with booking_id"
+        int booking_id FK
+        int user_id FK
+    }
+    REVIEW {
+        int id PK
+        int listing_id FK
+        int user_id FK
+        int booking_id FK, UK
+        int rating "1 to 5"
+        string comment
+    }
+    FAVORITE {
+        int user_id PK, FK
+        int listing_id PK, FK
+    }
+    CONVERSATION {
+        int id PK
+        int listing_id FK "unique with guest_id"
+        int guest_id FK
+        int host_id FK "the listing's host"
+        datetime updated_at
+    }
+    MESSAGE {
+        int id PK
+        int conversation_id FK
+        int sender_id FK
+        string body
+        datetime read_at "null until the other person opens it"
+    }
 ```
-users 1──* listings 1──* listing_images          listings *──* amenities (listing_amenities)
-users 1──* bookings *──1 listings                bookings 1──1 payments      bookings 1──1 reviews
-bookings *──0..1 coupons (coupon_usages)         users *──* listings (favorites)
-conversations: (listing, guest) unique, host = listing host   conversations 1──* messages (sender -> users)
-```
+
+How to read the cardinalities (they follow the constraints in `backend/app/models/`):
+
+* A booking has **at most one** payment and **at most one** review because `payments.booking_id` and `reviews.booking_id` are unique; the application always creates the payment together with the booking, and only a `COMPLETED` booking can be reviewed.
+* `listing_amenities` and `favorites` are pure join tables with composite primary keys, so a listing/amenity or user/listing pair can appear only once.
+* `coupon_usages` is unique per `(coupon_id, booking_id)`; the application attaches at most one coupon to a booking, and `bookings.coupon_code` keeps the applied code as plain text for display.
+* `conversations` is unique per `(listing_id, guest_id)`; `host_id` is always the listing's host (set by the service, not enforced by the schema).
+* The two money snapshots: `listings.currency` is the currency of that listing's three price columns, and `bookings.currency` is the currency of every amount on the booking and its payment.
 
 * `bookings.listing_id` is `RESTRICT`: a listing with booking history is **soft-deleted** (`status = DELETED`) so guests keep their trips; its favourites are removed.
 * `payments.booking_id`, `reviews.booking_id` are unique (one payment / review per booking); `favorites` has a composite key.
@@ -132,6 +329,25 @@ conversations: (listing, guest) unique, host = listing host   conversations 1─
 * **Atomic check-then-insert.** Booking creation runs in a `BEGIN IMMEDIATE` transaction, so the availability check and the insert can't interleave with another writer. A threaded test fires 6 simultaneous requests for the same dates: exactly one `201`, five `409`.
 * **State machine.** Booking `PENDING → CONFIRMED → COMPLETED`, or `→ CANCELLED`; payment `PENDING → SUCCESS | FAILED`, `SUCCESS → REFUNDED`. A `PENDING` booking holds its dates for 15 minutes (`hold_expires_at`); expired holds are released lazily on the next read/write. `CONFIRMED` stays whose check-out has passed become `COMPLETED` (unlocking reviews).
 * **Cancellation** is free until the check-in day: it releases the dates, refunds the payment and returns the coupon use.
+
+### Booking state diagram
+
+All payments are simulated; "paid" and "refunded" are only status values in the database.
+
+```mermaid
+flowchart TD
+    START(["Guest reserves"]) --> PEND["PENDING booking<br/>payment PENDING<br/>dates held for 15 minutes"]
+    PEND -- "card ending 0002: declined" --> FAIL["payment FAILED<br/>booking stays PENDING"]
+    FAIL -- "retry inside the hold" --> PEND
+    PEND -- "card ending 4242" --> CONF["CONFIRMED<br/>payment SUCCESS"]
+    PEND -- "hold expires" --> EXP["CANCELLED<br/>payment FAILED<br/>dates and coupon released"]
+    PEND -- "guest cancels" --> EXP
+    CONF -- "guest cancels before check-in day" --> REF["CANCELLED<br/>payment REFUNDED<br/>dates and coupon released"]
+    CONF -- "check-out day has passed" --> DONE["COMPLETED"]
+    DONE --> REV["Guest may review the stay once"]
+```
+
+Paying a `CONFIRMED` or `COMPLETED` booking again is a no-op, and paying a `CANCELLED` one returns `409`. A coupon can be changed only while the booking is `PENDING`.
 
 ## Currencies, pricing and coupons
 
@@ -346,13 +562,13 @@ The recommended split is **frontend on Vercel, backend on Render**, from this si
    *Health check path* `/api/health`, plan **Free**. Environment variables:
    `PYTHON_VERSION=3.12.7` (every pinned dependency resolves to a CPython 3.12 Linux wheel, checked with `pip download --python-version 3.12`; the tests themselves were run on Python 3.13), `SECRET_KEY=<random>` (Blueprint generates it), `CORS_ORIGINS=https://<your-app>.vercel.app`,
    optionally `CORS_ORIGIN_REGEX=https://.*\.vercel\.app`, `DATABASE_URL=sqlite:///./airbnb_clone.db`, `AUTO_SEED=true`.
-   Note the service URL, e.g. `https://airbnb-clone-api.onrender.com`; check `…/api/health`.
+   Note the service URL (`https://<your-api>.onrender.com`); check `…/api/health`.
 2. **Frontend → Vercel.** *Import* the repo, set **Root Directory = `frontend`** (framework: Next.js; defaults for build/output).
-   Environment variable: `NEXT_PUBLIC_API_URL=https://airbnb-clone-api.onrender.com` (no trailing slash). It is read at **build
+   Environment variable: `NEXT_PUBLIC_API_URL=https://<your-api>.onrender.com` (no trailing slash). It is read at **build
    time**, so redeploy after changing it.
 3. Put the final Vercel URL into the backend's `CORS_ORIGINS` (Render → Environment) and redeploy/restart the API.
-4. **Redeploy both** after pulling the currency update: the API's new columns are added automatically on startup, and on Render Free the
-   database is rebuilt and re-seeded (with the local-currency catalogue) anyway. The frontend needs a fresh build only if `NEXT_PUBLIC_API_URL` changed.
+4. **Redeploy both** after pulling changes that touch the schema or seed data: new columns are added automatically on startup, and on Render Free the
+   database is rebuilt and re-seeded anyway. The frontend needs a fresh build only if `NEXT_PUBLIC_API_URL` changed or its code changed.
 
 The current deployment is `https://airbnb-clone-five-peach.vercel.app` with API `https://airbnb-clone-api-1zli.onrender.com`
 (`/api/health` returns `{"status":"ok"}`).
@@ -368,7 +584,6 @@ For data that survives restarts you need a paid web service plus a persistent di
 (e.g. mount path `/var/data`) and set `DATABASE_URL=sqlite:////var/data/airbnb_clone.db` (a commented example is in
 `render.yaml`). A disk pins the service to a single instance, which suits SQLite. Switching to a managed Postgres would also
 solve persistence but was deliberately not done here, as the assignment specifies SQLite.
-
 
 ## End-to-end demo guide
 
