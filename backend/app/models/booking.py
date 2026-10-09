@@ -28,6 +28,9 @@ class Booking(Base):
     check_out: Mapped[date] = mapped_column(Date)
     guests: Mapped[int] = mapped_column(Integer)
     nights: Mapped[int] = mapped_column(Integer)
+    #: Currency of every amount below (and of the payment). It is a snapshot: later changes to the guest's
+    #: display currency or the demo rates never rewrite a booking.
+    currency: Mapped[str] = mapped_column(String(3), default="USD", server_default="USD")
     subtotal: Mapped[int] = mapped_column(Integer)
     cleaning_fee: Mapped[int] = mapped_column(Integer)
     service_fee: Mapped[int] = mapped_column(Integer)

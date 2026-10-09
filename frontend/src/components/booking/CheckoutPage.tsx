@@ -18,7 +18,8 @@ import { useFetch } from "@/hooks/useFetch";
 import { ApiError, bookingsApi, errorMessage, type Booking } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatLong } from "@/lib/dates";
-import { plural } from "@/lib/format";
+import { formatMoney, plural } from "@/lib/format";
+import { useCurrency } from "@/lib/currency-store";
 
 const PAYMENT_METHODS = [
   { id: "card_4242", label: "Mock card ending in 4242", hint: "Always approved" },
@@ -60,6 +61,7 @@ function CheckoutView({ booking, onChange }: { booking: Booking; onChange: (b: B
   const router = useRouter();
   const toast = useToast();
   const { user } = useApp();
+  const displayCurrency = useCurrency();
   const [method, setMethod] = useState(PAYMENT_METHODS[0].id);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -77,7 +79,7 @@ function CheckoutView({ booking, onChange }: { booking: Booking; onChange: (b: B
     try {
       const updated = await bookingsApi.setCoupon(booking.id, code);
       onChange(updated);
-      if (code) toast.success(`Coupon ${updated.coupon_code} applied: you save $${updated.discount}.`);
+      if (code) toast.success(`Coupon ${updated.coupon_code} applied: you save ${formatMoney(updated.discount, updated.currency)}.`);
       else setCouponInput("");
     } catch (error) {
       setCouponError(errorMessage(error).replace("Invalid coupon: ", ""));
@@ -214,7 +216,7 @@ function CheckoutView({ booking, onChange }: { booking: Booking; onChange: (b: B
               {couponError && <p role="alert" className="mt-2 text-sm text-danger">{couponError}</p>}
               {booking.coupon_code && !couponError && (
                 <p role="status" className="mt-2 text-sm font-medium text-success">
-                  {booking.coupon_code} applied — you save ${booking.discount}.{" "}
+                  {booking.coupon_code} applied — you save {formatMoney(booking.discount, booking.currency)}.{" "}
                   <button type="button" onClick={() => void applyCoupon(null)} className="font-semibold underline">Remove</button>
                 </p>
               )}
@@ -255,7 +257,7 @@ function CheckoutView({ booking, onChange }: { booking: Booking; onChange: (b: B
 
           <div className="space-y-3">
             <Button size="lg" className="w-full md:w-auto md:min-w-72" onClick={pay} loading={paying} disabled={expired || couponBusy}>
-              {paying ? "Processing payment…" : `Pay and reserve · $${booking.total.toLocaleString("en-US")}`}
+              {paying ? "Processing payment…" : `Pay and reserve · ${formatMoney(booking.total, booking.currency)}`}
             </Button>
             <p className="flex items-center gap-2 text-sm text-muted">
               <ShieldCheck className="size-4" /> By continuing you agree to the free-cancellation policy: cancel any time before check-in for a full refund.
@@ -274,14 +276,41 @@ function CheckoutView({ booking, onChange }: { booking: Booking; onChange: (b: B
                 <p className="text-xs text-muted">{booking.listing.property_type}</p>
                 <p className="line-clamp-2 font-medium">{booking.listing.title}</p>
                 <p className="mt-1 text-sm text-muted">{booking.listing.city}, {booking.listing.country}</p>
+                <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
+                  <Avatar name={booking.listing.host.name} src={booking.listing.host.avatar} className="size-5" />
+                  Hosted by {booking.listing.host.name}
+                </p>
               </div>
             </div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-line py-5 text-sm">
+              <div>
+                <dt className="text-muted">Check-in</dt>
+                <dd className="font-medium">{formatLong(booking.check_in)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted">Check-out</dt>
+                <dd className="font-medium">{formatLong(booking.check_out)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted">Stay</dt>
+                <dd className="font-medium">{plural(booking.nights, "night")} · {plural(booking.guests, "guest")}</dd>
+              </div>
+              <div>
+                <dt className="text-muted">Payment</dt>
+                <dd className="font-medium">{booking.payment?.status === "FAILED" ? "Declined, retry" : "Not paid yet"}</dd>
+              </div>
+            </dl>
             <h2 className="my-5 text-[22px] font-semibold">Price details</h2>
             <PriceRows
               pricing={{ ...booking, nightly_price: Math.round(booking.subtotal / booking.nights) }}
               couponCode={booking.coupon_code}
             />
             <p className="mt-4 text-xs text-muted">Reference {booking.reference}</p>
+            <p className="mt-1 text-xs text-muted">
+              This reservation is priced in {booking.currency}
+              {displayCurrency !== booking.currency && ` (you are browsing in ${displayCurrency}; a booking keeps the currency it was made in)`}
+              . Mock payment: no money is charged.
+            </p>
           </div>
         </aside>
       </div>

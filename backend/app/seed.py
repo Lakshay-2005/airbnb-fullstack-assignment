@@ -10,6 +10,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.currency import currency_for_country
 from app.db.database import Base, SessionLocal, engine, init_db
 from app.models import (
     Amenity,
@@ -63,6 +64,7 @@ def _make_booking(listing: Listing, guest: User, start, nights: int, status: str
         check_out=start + timedelta(days=nights),
         guests=min(listing.guests_capacity, random.choice([1, 2, 2, 3, 4])),
         nights=nights,
+        currency=pricing.currency,
         subtotal=pricing.subtotal,
         cleaning_fee=pricing.cleaning_fee,
         service_fee=pricing.service_fee,
@@ -115,6 +117,7 @@ def _make_listing(item, users: dict[str, User], amenities: dict[str, Amenity]) -
         bedrooms=item["bedrooms"],
         beds=item["beds"],
         bathrooms=item["baths"],
+        currency=currency_for_country(item["country"]),  # prices below are in this currency
         nightly_price=item["price"],
         cleaning_fee=item["cleaning"],
         service_fee=item["service"],

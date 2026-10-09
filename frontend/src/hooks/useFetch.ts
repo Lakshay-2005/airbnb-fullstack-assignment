@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isAbortError } from "@/lib/api";
+import { useCurrency } from "@/lib/currency-store";
 
 interface FetchState<T> {
   /** The request key the stored `data`/`error` belong to. */
@@ -21,8 +22,10 @@ export function useFetch<T>(
   enabled = true,
 ) {
   const [nonce, setNonce] = useState(0);
+  // Prices come back in the display currency, so every request is re-run when it changes.
+  const currency = useCurrency();
   const [state, setState] = useState<FetchState<T>>({ key: null, data: null, error: null });
-  const key = JSON.stringify([nonce, ...deps]);
+  const key = JSON.stringify([nonce, currency, ...deps]);
   const fetcherRef = useRef(fetcher);
   useEffect(() => {
     fetcherRef.current = fetcher;

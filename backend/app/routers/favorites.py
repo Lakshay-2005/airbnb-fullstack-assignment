@@ -2,6 +2,7 @@ from fastapi import APIRouter, Response
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.sqlite import insert
 
+from app.core.currency import DEFAULT_DISPLAY_CURRENCY, normalize_currency
 from app.core.errors import not_found
 from app.models import Favorite, Listing, ListingStatus
 from app.routers.deps import CurrentUser, DbSession
@@ -12,14 +13,15 @@ router = APIRouter(prefix="/favorites", tags=["favorites"])
 
 
 @router.get("", response_model=list[ListingCard])
-def list_favorites(db: DbSession, user: CurrentUser):
+def list_favorites(db: DbSession, user: CurrentUser, currency: str = DEFAULT_DISPLAY_CURRENCY):
+    currency = normalize_currency(currency)
     rows = db.scalars(
         select(Listing)
         .join(Favorite, Favorite.listing_id == Listing.id)
         .where(Favorite.user_id == user.id, Listing.status == ListingStatus.ACTIVE)
         .order_by(Favorite.created_at.desc())
     ).unique()
-    return [to_card(listing) for listing in rows]
+    return [to_card(listing, currency=currency) for listing in rows]
 
 
 @router.get("/ids", response_model=list[int])

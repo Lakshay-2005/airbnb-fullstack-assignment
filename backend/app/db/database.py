@@ -64,5 +64,7 @@ def write_session(bind) -> Session:
 
 def init_db() -> None:
     from app import models  # noqa: F401  (register tables)
+    from app.db.migrations import run_migrations
 
     Base.metadata.create_all(engine)
+    run_migrations(engine)  # adds columns introduced after a database was first created

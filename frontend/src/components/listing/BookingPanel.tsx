@@ -34,7 +34,7 @@ export function BookingPanel({ listing, booking, className }: BookingPanelProps)
   if (booking.isOwner) {
     return (
       <div className={cn("rounded-2xl border border-line p-6 shadow-card", className)}>
-        <p className="text-xl font-semibold">{formatMoney(listing.nightly_price)} <span className="text-base font-normal text-muted">night</span></p>
+        <p className="text-xl font-semibold">{formatMoney(listing.nightly_price, listing.currency)} <span className="text-base font-normal text-muted">night</span></p>
         <Alert className="mt-4">This is your listing, so you can&apos;t book it. Guests see a booking card here.</Alert>
         <ButtonLink href={`/host/listings/${listing.id}/edit`} variant="secondary" className="mt-4 w-full">
           Edit listing
@@ -47,7 +47,7 @@ export function BookingPanel({ listing, booking, className }: BookingPanelProps)
     <div className={cn("rounded-2xl border border-line bg-paper p-6 shadow-card", className)}>
       <div className="flex items-baseline justify-between gap-3">
         <p>
-          <span className="text-[22px] font-semibold">{formatMoney(listing.nightly_price)}</span>{" "}
+          <span className="text-[22px] font-semibold">{formatMoney(listing.nightly_price, listing.currency)}</span>{" "}
           <span className="text-muted">night</span>
         </p>
         {listing.review_count > 0 && (

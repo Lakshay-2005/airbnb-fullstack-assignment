@@ -2,9 +2,18 @@ from dataclasses import dataclass
 from datetime import date
 from math import ceil
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.currency import (
+    CURRENCIES,
+    DEFAULT_DISPLAY_CURRENCY,
+    convert,
+    currency_for_country,
+    listing_amount_error,
+    normalize_currency,
+    rate_factor,
+)
 from app.core.errors import bad_request, conflict, forbidden, not_found
 from app.models import (
     Amenity,
@@ -28,7 +37,7 @@ from app.schemas.listing import (
 )
 from app.schemas.user import PublicUser
 from app.services import availability
-from app.services.pricing import validate_stay_dates
+from app.services.pricing import build_pricing, validate_stay_dates
 
 CATEGORIES = [
     ("beach", "Beach"),
@@ -54,13 +63,35 @@ PROPERTY_TYPES = [
     "Mountain home",
     "Villa",
 ]
-SORTS = {
-    "recommended": (Listing.id.asc(),),
-    "price_asc": (Listing.nightly_price.asc(), Listing.id.asc()),
-    "price_desc": (Listing.nightly_price.desc(), Listing.id.asc()),
-    "rating": (Listing.rating.desc(), Listing.review_count.desc(), Listing.id.asc()),
-    "newest": (Listing.created_at.desc(), Listing.id.desc()),
-}
+SORT_KEYS = ("recommended", "price_asc", "price_desc", "rating", "newest")
+
+
+def display_price(currency: str):
+    """SQL expression: a listing's nightly price converted into `currency` (same rule as `convert`).
+
+    Search filters and the price sort use this, so a price a guest sees in rupees is compared and
+    ordered as rupees, never as dollars. The tiny epsilon makes SQLite's ROUND break exact .5 ties
+    upwards like the Python (half-up) conversion does.
+    """
+    return case(
+        *[
+            (Listing.currency == code, func.round(Listing.nightly_price * rate_factor(code, currency) + 1e-9))
+            for code in CURRENCIES
+            if code != currency
+        ],
+        else_=Listing.nightly_price,
+    )
+
+
+def sort_order(sort: str, currency: str):
+    price = display_price(currency)
+    return {
+        "recommended": (Listing.id.asc(),),
+        "price_asc": (price.asc(), Listing.id.asc()),
+        "price_desc": (price.desc(), Listing.id.asc()),
+        "rating": (Listing.rating.desc(), Listing.review_count.desc(), Listing.id.asc()),
+        "newest": (Listing.created_at.desc(), Listing.id.desc()),
+    }[sort]
 
 
 @dataclass
@@ -78,6 +109,8 @@ class SearchParams:
     bedrooms: int | None = None
     bathrooms: int | None = None
     sort: str = "recommended"
+    #: Currency the price filters, the price sort and the returned prices use.
+    currency: str = DEFAULT_DISPLAY_CURRENCY
     page: int = 1
     page_size: int = 12
 
@@ -85,7 +118,9 @@ class SearchParams:
 # ------------------------------------------------------------------------ serialisation
 
 
-def to_card(listing: Listing, stay: StayQuote | None = None) -> ListingCard:
+def to_card(listing: Listing, stay: StayQuote | None = None, currency: str | None = None) -> ListingCard:
+    """Serialise a listing; prices are converted into `currency` (default: the listing's own)."""
+    shown = currency or listing.currency
     return ListingCard(
         id=listing.id,
         title=listing.title,
@@ -98,7 +133,9 @@ def to_card(listing: Listing, stay: StayQuote | None = None) -> ListingCard:
         bedrooms=listing.bedrooms,
         beds=listing.beds,
         bathrooms=listing.bathrooms,
-        nightly_price=listing.nightly_price,
+        currency=shown,
+        native_currency=listing.currency,
+        nightly_price=convert(listing.nightly_price, listing.currency, shown),
         rating=round(listing.rating, 2),
         review_count=listing.review_count,
         latitude=listing.latitude,
@@ -110,17 +147,18 @@ def to_card(listing: Listing, stay: StayQuote | None = None) -> ListingCard:
     )
 
 
-def to_detail(db: Session, listing: Listing) -> ListingDetail:
+def to_detail(db: Session, listing: Listing, currency: str | None = None) -> ListingDetail:
+    shown = currency or listing.currency
     host_count = db.scalar(
         select(func.count())
         .select_from(Listing)
         .where(Listing.host_id == listing.host_id, Listing.status == ListingStatus.ACTIVE)
     )
     return ListingDetail(
-        **to_card(listing).model_dump(),
+        **to_card(listing, currency=shown).model_dump(),
         description=listing.description,
-        cleaning_fee=listing.cleaning_fee,
-        service_fee=listing.service_fee,
+        cleaning_fee=convert(listing.cleaning_fee, listing.currency, shown),
+        service_fee=convert(listing.service_fee, listing.currency, shown),
         amenities=[a.name for a in listing.amenities],
         created_at=listing.created_at,
         updated_at=listing.updated_at,
@@ -157,8 +195,9 @@ def _has_amenity(name: str):
 
 
 def search_listings(db: Session, p: SearchParams) -> ListingPage:
-    if p.sort not in SORTS:
-        raise bad_request(f"Unknown sort '{p.sort}'. Use one of: {', '.join(SORTS)}.", "bad_sort")
+    if p.sort not in SORT_KEYS:
+        raise bad_request(f"Unknown sort '{p.sort}'. Use one of: {', '.join(SORT_KEYS)}.", "bad_sort")
+    currency = normalize_currency(p.currency, default=DEFAULT_DISPLAY_CURRENCY)
 
     nights = None
     if p.check_in and p.check_out:
@@ -173,10 +212,10 @@ def search_listings(db: Session, p: SearchParams) -> ListingPage:
         where.append(clause)
     if p.guests:
         where.append(Listing.guests_capacity >= p.guests)
-    if p.min_price is not None:
-        where.append(Listing.nightly_price >= p.min_price)
+    if p.min_price is not None:  # price filters are expressed in the display currency
+        where.append(display_price(currency) >= p.min_price)
     if p.max_price is not None:
-        where.append(Listing.nightly_price <= p.max_price)
+        where.append(display_price(currency) <= p.max_price)
     if p.property_types:
         where.append(Listing.property_type.in_(p.property_types))
     if p.category:
@@ -205,7 +244,7 @@ def search_listings(db: Session, p: SearchParams) -> ListingPage:
     rows = db.scalars(
         select(Listing)
         .where(*where)
-        .order_by(*SORTS[p.sort])
+        .order_by(*sort_order(p.sort, currency))
         .offset((p.page - 1) * p.page_size)
         .limit(p.page_size)
     ).unique()
@@ -214,11 +253,8 @@ def search_listings(db: Session, p: SearchParams) -> ListingPage:
     for listing in rows:
         stay = None
         if nights:
-            stay = StayQuote(
-                nights=nights,
-                total=listing.nightly_price * nights + listing.cleaning_fee + listing.service_fee,
-            )
-        items.append(to_card(listing, stay))
+            stay = StayQuote(nights=nights, total=build_pricing(listing, nights, currency=currency).total)
+        items.append(to_card(listing, stay, currency))
     return ListingPage(
         items=items,
         total=total,
@@ -280,7 +316,28 @@ def _coords_for_city(db: Session, data: ListingIn) -> tuple[float | None, float 
     return (match.latitude, match.longitude) if match else (None, None)
 
 
+#: Sanity bounds for host-entered prices, in USD so they mean the same in rupees, yen or francs.
+NIGHTLY_USD_BOUNDS = (1, 20_000)
+FEE_USD_BOUNDS = (0, 5_000)
+
+
+def _validate_prices(data: ListingIn, currency: str) -> None:
+    checks = (
+        ("Nightly price", data.nightly_price, NIGHTLY_USD_BOUNDS),
+        ("Cleaning fee", data.cleaning_fee, FEE_USD_BOUNDS),
+        ("Service fee", data.service_fee, FEE_USD_BOUNDS),
+    )
+    for label, amount, (low, high) in checks:
+        problem = listing_amount_error(amount, currency, minimum_usd=low, maximum_usd=high)
+        if problem:
+            raise bad_request(f"{label}: {problem}", "invalid_price")
+
+
 def _apply(db: Session, listing: Listing, data: ListingIn) -> None:
+    # The pricing currency follows the listing's country; the three price fields are in that currency.
+    currency = currency_for_country(data.country)
+    _validate_prices(data, currency)
+    listing.currency = currency
     fields = data.model_dump(exclude={"images", "amenities", "latitude", "longitude"})
     for key, value in fields.items():
         setattr(listing, key, value)
@@ -335,7 +392,10 @@ def delete_listing(db: Session, host: User, listing_id: int) -> None:
     db.commit()
 
 
-def host_listings(db: Session, host: User) -> list[HostListing]:
+def host_listings(db: Session, host: User, currency: str | None = None) -> list[HostListing]:
+    """The host's listings with booking stats. Prices and earnings are shown in `currency`
+    (default: each listing's own currency); earnings from bookings made in other currencies are
+    converted with the demo rates."""
     _require_host(host)
     listings = db.scalars(
         select(Listing)
@@ -344,30 +404,37 @@ def host_listings(db: Session, host: User) -> list[HostListing]:
     ).unique()
 
     today = utcnow().date()
-    stats = {
+    counts = {
         row.listing_id: row
         for row in db.execute(
             select(
                 Booking.listing_id,
                 func.count().label("total"),
                 func.sum(func.iif(Booking.check_out > today, 1, 0)).label("upcoming"),
-                func.sum(Booking.total).label("earnings"),
             )
-            .where(
-                Booking.status.in_([BookingStatus.CONFIRMED, BookingStatus.COMPLETED]),
-            )
+            .where(Booking.status.in_([BookingStatus.CONFIRMED, BookingStatus.COMPLETED]))
             .group_by(Booking.listing_id)
         )
     }
+    # Earnings are summed per (listing, booking currency) so each group converts exactly once.
+    earned: dict[int, list[tuple[str, int]]] = {}
+    for row in db.execute(
+        select(Booking.listing_id, Booking.currency, func.sum(Booking.total))
+        .where(Booking.status.in_([BookingStatus.CONFIRMED, BookingStatus.COMPLETED]))
+        .group_by(Booking.listing_id, Booking.currency)
+    ):
+        earned.setdefault(row[0], []).append((row[1], int(row[2] or 0)))
+
     result = []
     for listing in listings:
-        row = stats.get(listing.id)
+        shown = currency or listing.currency
+        row = counts.get(listing.id)
         result.append(
             HostListing(
-                **to_card(listing).model_dump(),
+                **to_card(listing, currency=shown).model_dump(),
                 booking_count=row.total if row else 0,
                 upcoming_booking_count=int(row.upcoming or 0) if row else 0,
-                earnings=int(row.earnings or 0) if row else 0,
+                earnings=sum(convert(amount, code, shown) for code, amount in earned.get(listing.id, [])),
             )
         )
     return result

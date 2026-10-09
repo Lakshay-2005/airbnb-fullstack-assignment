@@ -51,6 +51,7 @@
 
   --animate-fade-in: fade-in 0.18s ease-out both;
   --animate-drop-in: drop-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-drop-out: drop-out 0.18s cubic-bezier(0.4, 0, 1, 1) both;
   --animate-fade-out: fade-out 0.15s ease-in both;
   --animate-modal-in: modal-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-modal-out: modal-out 0.15s ease-in both;
@@ -64,6 +65,7 @@
 
   @keyframes fade-in { from { opacity: 0; } }
   @keyframes drop-in { from { opacity: 0; transform: translateY(-10px); } }
+  @keyframes drop-out { to { opacity: 0; transform: translateY(-8px); } }
   @keyframes fade-out { to { opacity: 0; } }
   @keyframes modal-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } }
   @keyframes modal-out { to { opacity: 0; transform: translateY(8px) scale(0.99); } }
@@ -190,7 +192,7 @@ html[data-theme="dark"] iframe[title^="Map showing"] {
   height: max(0px, calc(44px - var(--s, 0) * 1px));
 }
 .hdr-fade {
-  opacity: clamp(0, calc(1 - var(--s, 0) / 44), 1);
+  opacity: clamp(0, calc(1 - var(--s, 0) / 30), 1);
 }
 
 /* ---------- discovery carousels ---------- */
@@ -312,6 +314,37 @@ html[data-theme="dark"] iframe[title^="Map showing"] {
 .range-thumb:focus-visible::-webkit-slider-thumb {
   outline: 2px solid var(--color-ink);
   outline-offset: 2px;
+}
+
+/* ---------- print: only the booking receipt (see components/booking/BookingReceipt.tsx) ---------- */
+@page {
+  size: A4;
+  margin: 12mm 14mm;
+}
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    min-height: 0 !important;
+  }
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  .receipt {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+  .receipt img {
+    break-inside: avoid;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

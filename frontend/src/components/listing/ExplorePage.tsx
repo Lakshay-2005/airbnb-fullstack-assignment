@@ -16,7 +16,9 @@ import { listingsApi, type SearchFilters } from "@/lib/api";
 import { formatRange } from "@/lib/dates";
 import { cn } from "@/lib/cn";
 import { plural } from "@/lib/format";
-import { applyQuickFilter, parseQuick, QUICK_FILTERS } from "@/lib/quick-filters";
+import { convertAmount, niceRound } from "@/lib/currency";
+import { useCurrency } from "@/lib/currency-store";
+import { applyQuickFilter, parseQuick, quickLabel, quickSummary } from "@/lib/quick-filters";
 import { activeFilterCount, filtersFromParams, filtersToParams } from "@/lib/search-params";
 import { DiscoveryHome } from "./DiscoveryHome";
 import { ListingCard } from "./ListingCard";
@@ -36,7 +38,8 @@ export function ExplorePage() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const { ready } = useApp();
+  const { ready, rates, currencyTable } = useApp();
+  const currency = useCurrency();
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const paramsKey = params.toString();
@@ -46,7 +49,18 @@ export function ExplorePage() {
   const viewAll = params.get("view") === "all";
   // "?quick=" is the top-navigation quick filter; it is applied on top of the user's own filters.
   const quick = parseQuick(params.get("quick"));
-  const effective = useMemo(() => applyQuickFilter(filters, quick), [filters, quick]);
+  const quickCtx = useMemo(() => ({ currency, rates }), [currency, rates]);
+  // Price bounds in the URL remember the currency they were chosen in (?cur=); show and search them in
+  // the display currency, so "₹5,000" is never compared as "$5,000" after the guest switches currency.
+  const displayFilters = useMemo<SearchFilters>(() => {
+    const from = filters.price_currency;
+    const convert = (value?: number) =>
+      value === undefined || !from || from === currency ? value : niceRound(convertAmount(value, from, currency, rates));
+    return { ...filters, min_price: convert(filters.min_price), max_price: convert(filters.max_price), price_currency: undefined };
+  }, [filters, currency, rates]);
+  const effective = useMemo(() => applyQuickFilter(displayFilters, quick, quickCtx), [displayFilters, quick, quickCtx]);
+  // Conversion needs the rate table whenever a price bound or the budget tab is involved.
+  const ratesReady = currencyTable !== null || (!quick && filters.price_currency === undefined);
   const searching = [...new URLSearchParams(paramsKey).keys()].some((key) => key !== "view");
   const browsing = !viewAll && !searching;
 
@@ -54,7 +68,7 @@ export function ExplorePage() {
   const results = useFetch(
     (signal) => listingsApi.search({ ...effective, page, page_size: PAGE_SIZE }, { signal }),
     [paramsKey],
-    ready && !browsing,
+    ready && !browsing && (ratesReady || (quick !== "budget" && !filters.price_currency)),
   );
 
   const navigate = useCallback(
@@ -108,7 +122,7 @@ export function ExplorePage() {
   const subline = [
     filters.check_in && filters.check_out ? formatRange(filters.check_in, filters.check_out) : null,
     filters.guests ? plural(filters.guests, "guest") : null,
-    quick ? QUICK_FILTERS[quick].summary : null,
+    quick ? quickSummary(quick, quickCtx) : null,
     filterCount ? plural(filterCount, "filter") + " applied" : null,
   ]
     .filter(Boolean)
@@ -191,7 +205,7 @@ export function ExplorePage() {
                   )}
                   {quick && (
                     <Button variant={filterCount > 0 ? "secondary" : "dark"} onClick={clearQuick}>
-                      Remove “{QUICK_FILTERS[quick].label}”
+                      Remove “{quickLabel(quick, quickCtx)}”
                     </Button>
                   )}
                   <Button variant="secondary" onClick={clearAll}>
@@ -232,8 +246,8 @@ export function ExplorePage() {
       <FiltersModal
         open={filtersOpen}
         onClose={() => setFiltersOpen(false)}
-        filters={filters}
-        quick={quick}
+        filters={displayFilters}
+        transform={(draft) => applyQuickFilter(draft, quick, quickCtx)}
         meta={meta.data}
         onApply={(next) => navigate(next)}
       />

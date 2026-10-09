@@ -29,7 +29,7 @@ def test_original_records_are_untouched_by_the_extension(client):
     """Tests and demos rely on these: Maya owns exactly the first 7 listings, Goa has two stays."""
     items = {item["id"]: item for item in all_listings(client)}
     assert [i for i, item in items.items() if item["host"]["name"] == "Maya Kapoor"] == [1, 2, 3, 4, 5, 6, 27]
-    assert items[1]["title"] == "Palm-fringed pool villa near Anjuna" and items[1]["nightly_price"] == 240
+    assert items[1]["title"] == "Palm-fringed pool villa near Anjuna" and items[1]["nightly_price"] == 19_500
     assert min(items) == 1 and max(items) == 48
 
 
@@ -45,17 +45,19 @@ def test_quick_filter_contract(client):
     top = client.get("/api/listings?page_size=48&min_rating=4.8").json()
     assert top["total"] > 0 and all(item["rating"] >= 4.8 for item in top["items"])
 
-    budget = client.get("/api/listings?page_size=48&max_price=150").json()
-    assert budget["total"] > 0 and all(item["nightly_price"] <= 150 for item in budget["items"])
+    budget = client.get("/api/listings?page_size=48&max_price=12600").json()  # US$150 in rupees
+    assert budget["total"] > 0 and all(item["nightly_price"] <= 12_600 for item in budget["items"])
 
     homes = client.get(f"/api/listings?page_size=48&property_type={WHOLE_HOME_TYPES}").json()
     assert homes["total"] > 0
     assert all(item["property_type"] in WHOLE_HOME_TYPES.split(",") for item in homes["items"])
 
     # quick filters combine with a destination (AND), they never widen the search
-    combined = client.get("/api/listings?page_size=48&location=India&max_price=150&min_rating=4.8").json()
+    combined = client.get("/api/listings?page_size=48&location=India&max_price=12600&min_rating=4.8").json()
     assert 0 < combined["total"] < budget["total"]
-    assert all(i["country"] == "India" and i["nightly_price"] <= 150 and i["rating"] >= 4.8 for i in combined["items"])
+    assert all(
+        i["country"] == "India" and i["nightly_price"] <= 12_600 and i["rating"] >= 4.8 for i in combined["items"]
+    )
 
 
 def test_home_page_section_queries_return_stays(client):

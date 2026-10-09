@@ -36,6 +36,10 @@ export interface ListingCard {
   bedrooms: number;
   beds: number;
   bathrooms: number;
+  /** Currency of `nightly_price` (and the fees on a detail): the one the request asked for. */
+  currency: string;
+  /** The currency the host prices the listing in (set from its country). */
+  native_currency: string;
   nightly_price: number;
   rating: number;
   review_count: number;
@@ -61,6 +65,8 @@ export interface HostListing extends ListingCard {
   booking_count: number;
   upcoming_booking_count: number;
   earnings: number;
+  /** Currency of `earnings`. */
+  currency: string;
 }
 
 export interface Page<T> {
@@ -105,6 +111,7 @@ export interface Meta {
   property_types: string[];
   categories: { id: string; label: string }[];
   amenities: string[];
+  currency: string;
   price_min: number;
   price_max: number;
 }
@@ -123,6 +130,7 @@ export interface PriceBreakdown {
   service_fee: number;
   discount: number;
   total: number;
+  /** Every amount in this breakdown is whole units of this currency. */
   currency: string;
 }
 
@@ -191,6 +199,8 @@ export interface BookingInput {
   check_out: string;
   guests: number;
   coupon_code?: string | null;
+  /** Currency to price and store the booking in. */
+  currency?: string;
 }
 
 export interface Review {
@@ -221,8 +231,11 @@ export interface SearchFilters {
   check_in?: string;
   check_out?: string;
   guests?: number;
+  /** Nightly price bounds, in `price_currency` (default: the display currency). */
   min_price?: number;
   max_price?: number;
+  /** Currency the min/max price values were chosen in (URL param `cur`). */
+  price_currency?: string;
   property_type?: string[];
   category?: string;
   amenities?: string[];

@@ -7,10 +7,11 @@ export type Theme = "light" | "dark";
 export const THEME_KEY = "airbnb-clone.theme";
 
 /**
- * Runs in <head> before first paint (see app/layout.tsx), so a saved or system dark theme never
- * flashes white. A saved choice wins; otherwise the OS preference decides.
+ * Runs in <head> before first paint (see app/layout.tsx), so a saved dark theme never flashes white.
+ * First-time visitors always get the light theme, whatever their OS prefers; only an explicit,
+ * previously saved choice ("dark") changes that.
  */
-export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("${THEME_KEY}");if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.dataset.theme=t}catch(e){}})();`;
+export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("${THEME_KEY}")==="dark"?"dark":"light";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="light"}})();`;
 
 const listeners = new Set<() => void>();
 

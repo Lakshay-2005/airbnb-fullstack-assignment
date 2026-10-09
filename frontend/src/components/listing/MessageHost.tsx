@@ -11,7 +11,13 @@ import { useApp } from "@/context/AppProvider";
 import { errorMessage, messagesApi, type ListingDetail } from "@/lib/api";
 
 /** "Message host" button + composer dialog. Opens the thread in the inbox once the first message is sent. */
-export function MessageHost({ listing }: { listing: ListingDetail }) {
+export function MessageHost({
+  listing,
+  className,
+}: {
+  listing: Pick<ListingDetail, "id" | "title" | "host">;
+  className?: string;
+}) {
   const router = useRouter();
   const toast = useToast();
   const { user, refreshUnread } = useApp();
@@ -38,7 +44,7 @@ export function MessageHost({ listing }: { listing: ListingDetail }) {
 
   return (
     <>
-      <Button variant="secondary" size="sm" icon={<MessageCircle className="size-4" />} onClick={() => setOpen(true)}>
+      <Button variant="secondary" size="sm" className={className} icon={<MessageCircle className="size-4" />} onClick={() => setOpen(true)}>
         Message host
       </Button>
       <Modal

@@ -44,9 +44,10 @@ def test_price_calculation_is_server_authoritative(client, guest):
     assert response.status_code == 201
     booking = response.json()
     assert booking["nights"] == 4
-    assert booking["subtotal"] == VILLA_NIGHTLY * 4 == 960
+    assert booking["subtotal"] == VILLA_NIGHTLY * 4 == 78_000
     assert booking["discount"] == 0
-    assert booking["total"] == 960 + VILLA_CLEANING + VILLA_SERVICE == 1065
+    assert booking["currency"] == "INR"  # no currency requested: the listing's own
+    assert booking["total"] == 78_000 + VILLA_CLEANING + VILLA_SERVICE == 84_000
     assert booking["status"] == "PENDING" and booking["payment"]["status"] == "PENDING"
     assert booking["payment"]["amount"] == booking["total"]
     assert booking["reference"].startswith("AC-")
@@ -65,8 +66,9 @@ def test_quote_matches_created_booking(client, guest):
     ).json()
     assert quote["bookable"] is True
     pricing = quote["pricing"]
-    assert pricing["subtotal"] == 720 and pricing["discount"] == 72
-    assert pricing["total"] == 720 + 60 + 45 - 72
+    assert pricing["currency"] == "INR"
+    assert pricing["subtotal"] == 58_500 and pricing["discount"] == 5_850  # 10% (under the ₹12,600 cap)
+    assert pricing["total"] == 58_500 + VILLA_CLEANING + VILLA_SERVICE - 5_850
 
     booking = create(client, guest, check_in=100, check_out=103, coupon_code="WELCOME10").json()
     assert booking["total"] == pricing["total"] and booking["coupon_code"] == "WELCOME10"
@@ -286,23 +288,25 @@ def test_coupon_validation_messages(client, guest):
         return client.post("/api/coupons/validate", json=body, headers=guest).json()
 
     ok = validate("WELCOME10")
-    assert ok["valid"] and ok["discount"] == 96 and ok["pricing"]["total"] == 960 + 105 - 96
+    assert ok["valid"] and ok["discount"] == 7_800 and ok["currency"] == "INR"
+    assert ok["pricing"]["total"] == 78_000 + 6_000 - 7_800
 
     assert not validate("NOPE")["valid"] and "isn't valid" in validate("NOPE")["message"]
     assert "expired" in validate("EXPIRED2020")["message"]
     assert "no longer active" in validate("paused15")["message"]
     assert "usage limit" in validate("FIRSTSTAY")["message"]
-    assert "at least $2500" in validate("FLAT500")["message"]
-    assert validate("flat50")["discount"] == 50  # codes are case-insensitive
+    assert "at least ₹2,10,000" in validate("FLAT500")["message"]  # US$2,500 in rupees, Indian grouping
+    assert validate("flat50")["discount"] == 4_200  # codes are case-insensitive; US$50 = ₹4,200
 
 
 def test_coupon_discount_is_capped(client, guest):
     long_stay = {"code": "SUMMER20", "listing_id": 10, "check_in": day(100), "check_out": day(110)}
     result = client.post("/api/coupons/validate", json=long_stay, headers=guest).json()
-    assert result["valid"] and result["discount"] == 300  # 20% of $7,800 capped at $300
+    # listing 10 is priced in AED: 20% of AED 28,800 would be 5,760, capped at US$300 = AED 1,102
+    assert result["valid"] and result["currency"] == "AED" and result["discount"] == 1_102
 
     flat = {"code": "FLAT500", "listing_id": 10, "check_in": day(100), "check_out": day(104)}
-    assert client.post("/api/coupons/validate", json=flat, headers=guest).json()["discount"] == 500
+    assert client.post("/api/coupons/validate", json=flat, headers=guest).json()["discount"] == 1_836  # US$500
 
 
 def test_invalid_coupon_rejected_on_booking(client, guest):
@@ -347,11 +351,11 @@ def test_apply_and_remove_coupon_on_pending_booking(client, guest):
     applied = client.put(
         f"/api/bookings/{booking['id']}/coupon", json={"code": "welcome10"}, headers=guest
     ).json()
-    assert applied["discount"] == 96 and applied["total"] == 1065 - 96
+    assert applied["discount"] == 7_800 and applied["total"] == 84_000 - 7_800
     assert applied["payment"]["amount"] == applied["total"]
 
     removed = client.put(f"/api/bookings/{booking['id']}/coupon", json={"code": None}, headers=guest).json()
-    assert removed["discount"] == 0 and removed["total"] == 1065 and removed["coupon_code"] is None
+    assert removed["discount"] == 0 and removed["total"] == 84_000 and removed["coupon_code"] is None
 
     bad = client.put(f"/api/bookings/{booking['id']}/coupon", json={"code": "NOPE"}, headers=guest)
     assert bad.status_code == 400

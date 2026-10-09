@@ -1,10 +1,4 @@
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-
-export const formatMoney = (amount: number): string => money.format(amount);
+export { formatMoney } from "./currency";
 
 export const plural = (count: number, singular: string, pluralForm = `${singular}s`): string =>
   `${count} ${count === 1 ? singular : pluralForm}`;

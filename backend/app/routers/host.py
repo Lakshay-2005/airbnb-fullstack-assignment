@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from sqlalchemy import select
 
+from app.core.currency import DEFAULT_DISPLAY_CURRENCY, normalize_currency
 from app.core.errors import forbidden
 from app.models import Booking, BookingStatus, Listing, ListingStatus, User, UserRole
 from app.models.base import utcnow
@@ -21,9 +22,10 @@ def _require_host(user: User) -> None:
 
 
 @router.get("/listings", response_model=list[HostListing])
-def my_listings(db: DbSession, user: CurrentUser):
+def my_listings(db: DbSession, user: CurrentUser, currency: str | None = None):
+    """Prices and earnings in `currency`; without it each listing is shown in its own currency."""
     bookings_svc.housekeeping(db)
-    return host_listings(db, user)
+    return host_listings(db, user, normalize_currency(currency) if currency else None)
 
 
 @router.get("/bookings", response_model=list[BookingOut])
@@ -44,10 +46,11 @@ def my_listing_bookings(db: DbSession, user: CurrentUser):
 
 
 @router.get("/summary", response_model=HostSummary)
-def summary(db: DbSession, user: CurrentUser):
+def summary(db: DbSession, user: CurrentUser, currency: str = DEFAULT_DISPLAY_CURRENCY):
     _require_host(user)
+    currency = normalize_currency(currency)
     bookings_svc.housekeeping(db)
-    listings = host_listings(db, user)
+    listings = host_listings(db, user, currency)
     today = utcnow().date()
     upcoming = db.scalars(
         select(Booking.id)
@@ -64,4 +67,5 @@ def summary(db: DbSession, user: CurrentUser):
         booking_count=sum(item.booking_count for item in listings),
         upcoming_booking_count=len(upcoming),
         earnings=sum(item.earnings for item in listings),
+        currency=currency,
     )

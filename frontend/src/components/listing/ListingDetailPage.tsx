@@ -266,7 +266,7 @@ function ListingDetailView({ listing }: { listing: ListingDetail }) {
             {booking.quote?.pricing ? (
               <>
                 <p className="text-base font-semibold">
-                  {formatMoney(booking.quote.pricing.total)} <span className="font-normal text-muted">total</span>
+                  {formatMoney(booking.quote.pricing.total, booking.quote.pricing.currency)} <span className="font-normal text-muted">total</span>
                 </p>
                 <p className="truncate text-sm text-muted underline">
                   {formatRange(booking.checkIn!, booking.checkOut!)}
@@ -275,7 +275,7 @@ function ListingDetailView({ listing }: { listing: ListingDetail }) {
             ) : (
               <>
                 <p className="text-base font-semibold">
-                  {formatMoney(listing.nightly_price)} <span className="font-normal text-muted">night</span>
+                  {formatMoney(listing.nightly_price, listing.currency)} <span className="font-normal text-muted">night</span>
                 </p>
                 <p className="text-sm text-muted">Add dates for prices</p>
               </>

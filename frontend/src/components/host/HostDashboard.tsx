@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarRange, DollarSign, Eye, Home, Pencil, Plus, Trash2, KeyRound } from "lucide-react";
+import { CalendarRange, Eye, Home, KeyRound, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Alert } from "@/components/ui/Alert";
@@ -17,6 +17,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { errorMessage, hostApi, type HostListing } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatRange } from "@/lib/dates";
+import { useCurrency } from "@/lib/currency-store";
 import { formatMoney, plural } from "@/lib/format";
 
 type Tab = "listings" | "reservations";
@@ -54,6 +55,7 @@ function DashboardView({ hostName }: { hostName: string }) {
   const [toDelete, setToDelete] = useState<HostListing | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const currency = useCurrency();
   const items = listings.data ?? [];
   const received = bookings.data ?? [];
   const upcoming = received.filter((b) => b.status === "CONFIRMED" && b.check_out > new Date().toISOString().slice(0, 10));
@@ -80,7 +82,7 @@ function DashboardView({ hostName }: { hostName: string }) {
     { label: "Listings", value: listings.data ? String(items.length) : null, Icon: Home },
     { label: "Reservations", value: bookings.data ? String(received.filter((b) => b.status !== "CANCELLED").length) : null, Icon: CalendarRange },
     { label: "Upcoming stays", value: bookings.data ? String(upcoming.length) : null, Icon: Eye },
-    { label: "Earnings", value: listings.data ? formatMoney(earnings) : null, Icon: DollarSign },
+    { label: "Earnings", value: listings.data ? formatMoney(earnings, items[0]?.currency ?? currency) : null, Icon: Wallet },
   ];
 
   return (
@@ -148,10 +150,10 @@ function DashboardView({ hostName }: { hostName: string }) {
                       <Link href={`/listings/${listing.id}`} className="mt-1.5 block truncate text-lg font-semibold hover:underline">{listing.title}</Link>
                       <p className="truncate text-sm text-muted">{listing.city}, {listing.country}</p>
                       <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                        <span><strong>{formatMoney(listing.nightly_price)}</strong> / night</span>
+                        <span><strong>{formatMoney(listing.nightly_price, listing.currency)}</strong> / night</span>
                         <span>{plural(listing.booking_count, "booking")}</span>
                         <span className="text-muted">{listing.upcoming_booking_count} upcoming</span>
-                        <span className="text-muted">{formatMoney(listing.earnings)} earned</span>
+                        <span className="text-muted">{formatMoney(listing.earnings, listing.currency)} earned</span>
                       </p>
                     </div>
                     <div className="flex shrink-0 gap-2">
@@ -200,7 +202,7 @@ function DashboardView({ hostName }: { hostName: string }) {
                         <td className="max-w-56 px-4 py-3"><Link href={`/trips/${b.id}`} className="line-clamp-2 hover:underline">{b.listing.title}</Link></td>
                         <td className="whitespace-nowrap px-4 py-3">{formatRange(b.check_in, b.check_out)}<span className="block text-xs text-muted">{plural(b.nights, "night")}</span></td>
                         <td className="px-4 py-3">{b.guests}</td>
-                        <td className="whitespace-nowrap px-4 py-3 font-medium">{formatMoney(b.total)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 font-medium">{formatMoney(b.total, b.currency)}</td>
                         <td className="px-4 py-3"><StatusBadge status={b.status} /></td>
                       </tr>
                     ))}

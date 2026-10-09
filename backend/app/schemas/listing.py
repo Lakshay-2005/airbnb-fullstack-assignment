@@ -35,6 +35,11 @@ class ListingCard(BaseModel):
     bedrooms: int
     beds: int
     bathrooms: int
+    #: ISO code of the currency of `nightly_price` (and, on a detail, the fees): the one the client asked
+    #: to see prices in. Omitting `currency` on a request returns the listing's own (native) currency.
+    currency: str
+    #: The currency the listing is priced in by its host (derived from its country).
+    native_currency: str
     nightly_price: int
     rating: float
     review_count: int
@@ -80,9 +85,11 @@ class ListingIn(BaseModel):
     bedrooms: int = Field(ge=0, le=20)
     beds: int = Field(ge=1, le=40)
     bathrooms: int = Field(ge=1, le=20)
-    nightly_price: int = Field(ge=10, le=100_000)
-    cleaning_fee: int = Field(default=0, ge=0, le=10_000)
-    service_fee: int = Field(default=0, ge=0, le=10_000)
+    # Whole units of the currency derived from `country` (see core.currency); sane bounds are enforced
+    # in USD terms by the service so they mean the same thing in rupees, yen or francs.
+    nightly_price: int = Field(ge=10, le=100_000_000)
+    cleaning_fee: int = Field(default=0, ge=0, le=100_000_000)
+    service_fee: int = Field(default=0, ge=0, le=100_000_000)
     status: ListingStatus = ListingStatus.ACTIVE
     amenities: list[str] = Field(default_factory=list, max_length=40)
     images: list[str] = Field(min_length=1, max_length=MAX_IMAGES)
@@ -136,6 +143,7 @@ class MetaOut(BaseModel):
     property_types: list[str]
     categories: list[dict[str, str]]
     amenities: list[str]
+    currency: str
     price_min: int
     price_max: int
 

@@ -14,12 +14,16 @@ import { CompactCapsule } from "@/components/search/CompactCapsule";
 import { SearchBar, type SearchSegment, type SegmentRequest } from "@/components/search/SearchBar";
 import { CompactSearch } from "@/components/search/SearchSheet";
 import { AccountMenuContent } from "./AccountMenu";
+import { CurrencyButton } from "./CurrencyMenu";
+import { ThemeToggle } from "./ThemeToggle";
 import { Logo } from "./Logo";
 import { ProductTabs } from "./ProductTabs";
 
 /** Scroll distance (px) after which the bar shows the compact capsule, and the way back (hysteresis). */
-const COLLAPSE_AT = 24;
-const EXPAND_AT = 10;
+// Matches the pill's scroll-driven fade (`.hdr-fade` fades out over the first 30px) so the pill and the
+// capsule cross-fade together instead of overlapping.
+const COLLAPSE_AT = 30;
+const EXPAND_AT = 14;
 /** The in-page search collapses over this much scrolling (see `.hdr-expander` in globals.css). */
 const COLLAPSE_RANGE = 120;
 
@@ -43,7 +47,11 @@ export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [request, setRequest] = useState<SegmentRequest | null>(null);
   const peeking = request !== null;
+  // The drop-down search stays mounted for its exit animation (200 ms) after it is dismissed.
+  const [overlayShown, setOverlayShown] = useState(false);
+  if (peeking && !overlayShown) setOverlayShown(true);
   const ref = useRef<HTMLElement>(null);
+  const capsuleRef = useRef<HTMLDivElement>(null);
   const regionRef = useRef<HTMLDivElement>(null);
 
   // One rAF-throttled listener: a style write while the region is collapsing, state only on threshold crossings.
@@ -83,6 +91,20 @@ export function Header() {
     };
   }, [peeking]);
   const closePeek = useCallback(() => setRequest(null), []);
+  // Escape puts focus back on the capsule part that opened the search.
+  useEffect(() => {
+    if (!peeking) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") capsuleRef.current?.querySelector("button")?.focus({ preventScroll: true });
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [peeking]);
+  useEffect(() => {
+    if (peeking || !overlayShown) return;
+    const timer = window.setTimeout(() => setOverlayShown(false), 200);
+    return () => window.clearTimeout(timer);
+  }, [peeking, overlayShown]);
   useDismiss(ref, peeking, closePeek);
   const [lastPath, setLastPath] = useState(pathname);
   if (pathname !== lastPath) {
@@ -130,19 +152,19 @@ export function Header() {
       <header
         ref={ref}
         className={cn(
-          "fixed inset-x-0 top-0 z-40 bg-canvas transition-shadow duration-200",
+          "fixed inset-x-0 top-0 z-40 bg-canvas transition-shadow duration-200 print:hidden",
           peeking || scrolled || !isHome
             ? "shadow-[0_1px_0_#e6e6e6,0_6px_16px_rgb(0_0_0/0.04)]"
             : "shadow-[0_1px_0_transparent]",
         )}
       >
         {/* ---------- md+ : brand | tabs or capsule | host + account ---------- */}
-        <div className="container-page hidden h-20 grid-cols-[1fr_auto_1fr] items-center gap-4 md:grid">
+        <div className="container-page hidden h-20 items-center gap-4 md:grid md:grid-cols-[auto_minmax(0,1fr)_auto] xl:grid-cols-[1fr_auto_1fr]">
           <Link href="/" aria-label="airbnb — home" className="justify-self-start rounded-lg">
             <Logo />
           </Link>
 
-          <div className="grid items-center justify-items-center [&>*]:[grid-area:1/1]">
+          <div className="grid items-center justify-items-center justify-self-center [&>*]:[grid-area:1/1]">
             <div
               inert={!showTabs}
               className={cn(
@@ -153,6 +175,7 @@ export function Header() {
               <ProductTabs />
             </div>
             <div
+              ref={capsuleRef}
               inert={showTabs}
               className={cn(
                 "transition-[opacity,transform] duration-200 ease-out",
@@ -170,6 +193,8 @@ export function Header() {
             >
               {isHost ? "Host dashboard" : "Become a host"}
             </Link>
+            <CurrencyButton />
+            <ThemeToggle className="mr-1" />
             <Popover
               open={menuOpen}
               onClose={() => setMenuOpen(false)}
@@ -183,8 +208,13 @@ export function Header() {
         </div>
 
         {/* drop-down search: the same SearchBar, opened from the capsule on any route */}
-        {peeking && (
-          <div className="hidden animate-drop-in border-t border-line bg-canvas pb-6 pt-2 shadow-[0_12px_24px_rgb(0_0_0/0.08)] md:block">
+        {overlayShown && (
+          <div
+            className={cn(
+              "hidden border-t border-line bg-canvas pb-6 pt-2 shadow-[0_12px_24px_rgb(0_0_0/0.08)] md:block",
+              peeking ? "animate-drop-in" : "pointer-events-none animate-drop-out",
+            )}
+          >
             <div className="container-page">
               <SearchBar request={request} />
             </div>
@@ -198,7 +228,7 @@ export function Header() {
       </header>
 
       {/* Reserves the bar's height; on the home page it also holds the big pill / phone tabs, which scroll away with the page. */}
-      <div ref={regionRef} className="relative z-[35] bg-canvas">
+      <div ref={regionRef} className="relative z-[35] bg-canvas print:hidden">
         <div aria-hidden="true" className="h-[70px] md:h-20" />
         {isHome && (
           <>

@@ -13,7 +13,7 @@ import { ListingForm } from "./ListingForm";
 export function EditListing() {
   const { id } = useParams<{ id: string }>();
   const { user, ready } = useApp();
-  const listing = useFetch((signal) => listingsApi.get(id, { signal }), [id, user?.id], ready);
+  const listing = useFetch((signal) => listingsApi.get(id, { signal, native: true }), [id, user?.id], ready);
 
   if (!ready || (!listing.data && !listing.error)) {
     return (

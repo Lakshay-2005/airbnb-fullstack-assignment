@@ -1,3 +1,4 @@
+import type { CurrencyTable } from "@/lib/currency";
 import { request } from "./client";
 import type {
   Availability,
@@ -41,7 +42,9 @@ export const usersApi = {
 export const listingsApi = {
   search: (filters: SearchFilters, opts?: Signal) =>
     request<Page<ListingCard>>("/listings", { query: { ...filters }, ...opts }),
-  get: (id: number | string, opts?: Signal) => request<ListingDetail>(`/listings/${id}`, opts),
+  /** `native: true` returns the listing's own currency (what a host edits); otherwise the display currency. */
+  get: (id: number | string, opts?: Signal & { native?: boolean }) =>
+    request<ListingDetail>(`/listings/${id}`, opts),
   availability: (id: number | string, opts?: Signal) =>
     request<Availability>(`/listings/${id}/availability`, opts),
   meta: (opts?: Signal) => request<Meta>("/meta", opts),
@@ -52,7 +55,7 @@ export const listingsApi = {
 export const bookingsApi = {
   quote: (
     listingId: number,
-    params: { check_in: string; check_out: string; guests: number; coupon_code?: string },
+    params: { check_in: string; check_out: string; guests: number; coupon_code?: string; currency?: string },
     opts?: Signal,
   ) => request<Quote>(`/listings/${listingId}/quote`, { query: params, ...opts }),
   create: (input: BookingInput) => request<Booking>("/bookings", { method: "POST", body: input }),
@@ -117,4 +120,9 @@ export const messagesApi = {
       method: "POST",
       body: { listing_id: listingId, body },
     }),
+};
+
+export const currenciesApi = {
+  /** Supported currencies and the demo exchange rates (single source of truth: the server). */
+  list: (opts?: Signal) => request<CurrencyTable>("/currencies", opts),
 };

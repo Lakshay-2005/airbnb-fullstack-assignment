@@ -9,7 +9,8 @@ import { listingsApi, type Meta, type SearchFilters } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { amenityIcon, PROPERTY_ICONS } from "@/lib/icons";
 import { formatMoney } from "@/lib/format";
-import { applyQuickFilter, type QuickFilterId } from "@/lib/quick-filters";
+import { currencySymbol } from "@/lib/currency";
+import { useCurrency } from "@/lib/currency-store";
 import { FILTER_KEYS } from "@/lib/search-params";
 
 interface FiltersModalProps {
@@ -17,8 +18,8 @@ interface FiltersModalProps {
   onClose: () => void;
   /** Everything currently applied (search, category and filters). */
   filters: SearchFilters;
-  /** The top-nav quick filter in effect; it is included in the live result count. */
-  quick?: QuickFilterId;
+  /** Adds the top-nav quick filter in effect, so the live result count matches the results page. */
+  transform?: (filters: SearchFilters) => SearchFilters;
   meta: Meta | null;
   onApply: (next: SearchFilters) => void;
 }
@@ -33,7 +34,9 @@ const clearedFilters = (filters: SearchFilters): SearchFilters => {
   return next;
 };
 
-export function FiltersModal({ open, onClose, filters, quick, meta, onApply }: FiltersModalProps) {
+export function FiltersModal({ open, onClose, filters, transform, meta, onApply }: FiltersModalProps) {
+  const currency = useCurrency();
+  const symbol = currencySymbol(currency);
   const [draft, setDraft] = useState<SearchFilters>(filters);
   const [count, setCount] = useState<number | null>(null);
   const [prevOpen, setPrevOpen] = useState(open);
@@ -56,11 +59,12 @@ export function FiltersModal({ open, onClose, filters, quick, meta, onApply }: F
       return;
     const controller = new AbortController();
     listingsApi
-      .search({ ...applyQuickFilter(debouncedDraft, quick), page: 1, page_size: 1 }, { signal: controller.signal })
+      .search({ ...(transform ? transform(debouncedDraft) : debouncedDraft), page: 1, page_size: 1 }, { signal: controller.signal })
       .then((page) => setCount(page.total))
       .catch(() => setCount(null));
     return () => controller.abort();
-  }, [open, debouncedDraft, quick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `transform` is rebuilt every render
+  }, [open, debouncedDraft]);
 
   const set = (patch: Partial<SearchFilters>) => setDraft((d) => ({ ...d, ...patch }));
   const toggle = (key: "property_type" | "amenities", value: string) =>
@@ -70,7 +74,10 @@ export function FiltersModal({ open, onClose, filters, quick, meta, onApply }: F
       return { ...d, [key]: next.length ? next : undefined };
     });
 
-  const sliderMax = meta ? Math.max(100, Math.ceil(meta.price_max / 50) * 50) : 1000;
+  // The slider spans the catalogue's price range in the display currency (rupees need far coarser steps than dollars).
+  const priceMax = meta?.price_max ?? 1000;
+  const step = sliderStep(priceMax);
+  const sliderMax = Math.max(step * 10, Math.ceil(priceMax / step) * step);
   const invalidPrice =
     draft.min_price !== undefined && draft.max_price !== undefined && draft.min_price > draft.max_price;
   const lo = draft.min_price ?? 0;
@@ -96,7 +103,9 @@ export function FiltersModal({ open, onClose, filters, quick, meta, onApply }: F
             variant="dark"
             disabled={invalidPrice}
             onClick={() => {
-              onApply({ ...draft, page: 1 });
+              // Price bounds are remembered with the currency they were chosen in (?cur=), so a later switch converts them.
+              const priced = draft.min_price !== undefined || draft.max_price !== undefined;
+              onApply({ ...draft, price_currency: priced ? currency : undefined, page: 1 });
               onClose();
             }}
           >
@@ -116,13 +125,13 @@ export function FiltersModal({ open, onClose, filters, quick, meta, onApply }: F
             <input
               type="range"
               aria-label="Minimum price"
-              className={cn("range-thumb", lo >= sliderMax - 20 && "z-20")}
+              className={cn("range-thumb", lo >= sliderMax - step * 2 && "z-20")}
               min={0}
               max={sliderMax}
-              step={10}
+              step={step}
               value={lo}
               onChange={(e) => {
-                const value = Math.min(Number(e.target.value), hi - 10);
+                const value = Math.min(Number(e.target.value), hi - step);
                 set({ min_price: value <= 0 ? undefined : value });
               }}
             />
@@ -132,16 +141,17 @@ export function FiltersModal({ open, onClose, filters, quick, meta, onApply }: F
               className="range-thumb"
               min={0}
               max={sliderMax}
-              step={10}
+              step={step}
               value={hi}
               onChange={(e) => {
-                const value = Math.max(Number(e.target.value), lo + 10);
+                const value = Math.max(Number(e.target.value), lo + step);
                 set({ max_price: value >= sliderMax ? undefined : value });
               }}
             />
           </div>
           <div className="flex items-center gap-3">
             <PriceInput
+              symbol={symbol}
               label="Minimum"
               value={draft.min_price}
               placeholder="0"
@@ -149,6 +159,7 @@ export function FiltersModal({ open, onClose, filters, quick, meta, onApply }: F
             />
             <span className="text-muted">–</span>
             <PriceInput
+              symbol={symbol}
               label="Maximum"
               value={draft.max_price}
               placeholder={`${sliderMax}+`}
@@ -157,7 +168,7 @@ export function FiltersModal({ open, onClose, filters, quick, meta, onApply }: F
           </div>
           {invalidPrice && (
             <p role="alert" className="mt-2 text-sm text-danger">
-              Minimum price can&apos;t be higher than the maximum ({formatMoney(draft.max_price ?? 0)}).
+              Minimum price can&apos;t be higher than the maximum ({formatMoney(draft.max_price ?? 0, currency)}).
             </p>
           )}
         </Section>
@@ -250,6 +261,13 @@ export function FiltersModal({ open, onClose, filters, quick, meta, onApply }: F
   );
 }
 
+/** A friendly slider step (1, 2, 5 x 10^n) giving roughly 100 positions across the price range. */
+function sliderStep(max: number): number {
+  const raw = Math.max(1, max / 100);
+  const pow = 10 ** Math.floor(Math.log10(raw));
+  return [1, 2, 5, 10].map((m) => m * pow).find((candidate) => candidate >= raw) ?? pow * 10;
+}
+
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
     <section className="py-7">
@@ -314,11 +332,13 @@ function PillRow({
 }
 
 function PriceInput({
+  symbol,
   label,
   value,
   placeholder,
   onChange,
 }: {
+  symbol: string;
   label: string;
   value: number | undefined;
   placeholder: string;
@@ -331,7 +351,7 @@ function PriceInput({
         {label}
       </label>
       <div className="flex items-center gap-1">
-        <span aria-hidden="true">$</span>
+        <span aria-hidden="true">{symbol}</span>
         <input
           id={id}
           inputMode="numeric"

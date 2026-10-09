@@ -36,9 +36,9 @@ class ListingImage(Base):
 class Listing(Base):
     """A bookable stay.
 
-    All money columns are whole US dollars (integers): prices are exact and
-    never touch floating point. Discounts are rounded to the nearest dollar.
-    `service_fee` and `cleaning_fee` are flat per-stay amounts.
+    All money columns are whole units (integers) of the listing's own `currency`, which is derived
+    from its `country` (rupees for India, euros in the euro zone, ...). Prices are exact and never touch
+    floating point. `service_fee` and `cleaning_fee` are flat per-stay amounts in that same currency.
     """
 
     __tablename__ = "listings"
@@ -65,6 +65,8 @@ class Listing(Base):
     bedrooms: Mapped[int] = mapped_column(Integer)
     beds: Mapped[int] = mapped_column(Integer)
     bathrooms: Mapped[int] = mapped_column(Integer)
+    #: ISO code of the currency the three price columns below are expressed in (see core.currency).
+    currency: Mapped[str] = mapped_column(String(3), default="USD", server_default="USD")
     nightly_price: Mapped[int] = mapped_column(Integer)
     cleaning_fee: Mapped[int] = mapped_column(Integer, default=0)
     service_fee: Mapped[int] = mapped_column(Integer, default=0)

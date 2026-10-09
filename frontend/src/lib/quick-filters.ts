@@ -1,4 +1,5 @@
 import type { SearchFilters } from "@/lib/api";
+import { convertAmount, formatMoney, formatMoneyCompact, niceRound, type RateTable } from "@/lib/currency";
 
 /**
  * Top-navigation quick filters. They are stored in the URL as `?quick=<id>` and translated into
@@ -10,20 +11,54 @@ export type QuickFilterId = "homes" | "top-rated" | "budget";
 /** Whole-home property types (the remaining types are apartments, lofts and boutique stays). */
 export const WHOLE_HOME_TYPES = ["Villa", "Beach house", "Cabin", "Cottage", "Luxury home", "Mountain home"];
 export const TOP_RATED_MIN = 4.8;
-export const BUDGET_MAX_PRICE = 150;
+/** The budget tab means "under about US$150 a night", expressed in whatever currency is displayed. */
+export const BUDGET_USD = 150;
 
-export const QUICK_FILTERS: Record<QuickFilterId, { label: string; summary: string }> = {
-  homes: { label: "Homes", summary: "Entire homes" },
-  "top-rated": { label: "Top rated", summary: `Rated ${TOP_RATED_MIN}+` },
-  budget: { label: `Under $${BUDGET_MAX_PRICE}`, summary: `Under $${BUDGET_MAX_PRICE} a night` },
-};
-
-export function parseQuick(value: string | null | undefined): QuickFilterId | undefined {
-  return value && value in QUICK_FILTERS ? (value as QuickFilterId) : undefined;
+/** The display currency and demo rates that give a quick filter's price threshold its meaning. */
+export interface QuickContext {
+  currency: string;
+  rates: RateTable;
 }
 
-/** Applies a quick filter on top of the user's filters (never loosening what they already chose). */
-export function applyQuickFilter(filters: SearchFilters, quick: QuickFilterId | undefined): SearchFilters {
+export function budgetThreshold({ currency, rates }: QuickContext): number {
+  return niceRound(convertAmount(BUDGET_USD, "USD", currency, rates));
+}
+
+export function quickLabel(id: QuickFilterId, ctx: QuickContext, compact = false): string {
+  switch (id) {
+    case "homes":
+      return "Homes";
+    case "top-rated":
+      return "Top rated";
+    case "budget":
+      return `Under ${(compact ? formatMoneyCompact : formatMoney)(budgetThreshold(ctx), ctx.currency)}`;
+  }
+}
+
+export function quickSummary(id: QuickFilterId, ctx: QuickContext): string {
+  switch (id) {
+    case "homes":
+      return "Entire homes";
+    case "top-rated":
+      return `Rated ${TOP_RATED_MIN}+`;
+    case "budget":
+      return `${quickLabel("budget", ctx)} a night`;
+  }
+}
+
+export function parseQuick(value: string | null | undefined): QuickFilterId | undefined {
+  return value === "homes" || value === "top-rated" || value === "budget" ? value : undefined;
+}
+
+/**
+ * Applies a quick filter on top of the user's filters (never loosening what they already chose).
+ * `filters` must already be expressed in the display currency (`ctx.currency`).
+ */
+export function applyQuickFilter(
+  filters: SearchFilters,
+  quick: QuickFilterId | undefined,
+  ctx: QuickContext,
+): SearchFilters {
   switch (quick) {
     case "homes": {
       const chosen = filters.property_type?.filter((type) => WHOLE_HOME_TYPES.includes(type));
@@ -33,7 +68,7 @@ export function applyQuickFilter(filters: SearchFilters, quick: QuickFilterId | 
     case "top-rated":
       return { ...filters, min_rating: Math.max(filters.min_rating ?? 0, TOP_RATED_MIN) };
     case "budget":
-      return { ...filters, max_price: Math.min(filters.max_price ?? BUDGET_MAX_PRICE, BUDGET_MAX_PRICE) };
+      return { ...filters, max_price: Math.min(filters.max_price ?? Infinity, budgetThreshold(ctx)) };
     default:
       return filters;
   }

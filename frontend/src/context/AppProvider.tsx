@@ -12,6 +12,7 @@ import {
 } from "react";
 import {
   ApiError,
+  currenciesApi,
   errorMessage,
   favoritesApi,
   messagesApi,
@@ -20,6 +21,7 @@ import {
   type User,
 } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
+import { ratesFrom, type CurrencyTable, type RateTable } from "@/lib/currency";
 
 interface AppState {
   /** The acting demo user (null until the first /users/current response). */
@@ -33,6 +35,9 @@ interface AppState {
   /** Unread chat messages for the acting user, shown as a badge in the account menu. */
   unreadMessages: number;
   refreshUnread: () => Promise<void>;
+  /** Supported currencies and the demo exchange rates, from the server (null until loaded). */
+  currencyTable: CurrencyTable | null;
+  rates: RateTable;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -44,6 +49,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [demoUsers, setDemoUsers] = useState<User[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<ReadonlySet<number>>(new Set());
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [currencyTable, setCurrencyTable] = useState<CurrencyTable | null>(null);
   const pending = useRef(new Set<number>());
 
   const refreshUnread = useCallback(async () => {
@@ -60,6 +66,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {
       setFavoriteIds(new Set());
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    currenciesApi
+      .list()
+      .then((table) => !cancelled && setCurrencyTable(table))
+      .catch(() => undefined); // the selector then falls back to its built-in list of codes
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -131,6 +148,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [favoriteIds, toast],
   );
 
+  const rates = useMemo(() => ratesFrom(currencyTable), [currencyTable]);
   const value = useMemo(
     () => ({
       user,
@@ -141,8 +159,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleFavorite,
       unreadMessages,
       refreshUnread,
+      currencyTable,
+      rates,
     }),
-    [user, ready, demoUsers, switchUser, favoriteIds, toggleFavorite, unreadMessages, refreshUnread],
+    [user, ready, demoUsers, switchUser, favoriteIds, toggleFavorite, unreadMessages, refreshUnread, currencyTable, rates],
   );
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

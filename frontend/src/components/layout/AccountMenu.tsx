@@ -1,11 +1,15 @@
 "use client";
 
-import { Check, CalendarCheck, Heart, LayoutDashboard, MessageCircle, Moon, Sun } from "lucide-react";
+import { useState } from "react";
+import { Check, CalendarCheck, ChevronDown, Coins, Heart, LayoutDashboard, MessageCircle, Moon, Sun } from "lucide-react";
 import Link from "next/link";
 import { useApp } from "@/context/AppProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/cn";
+import { currencySymbol } from "@/lib/currency";
+import { useCurrency } from "@/lib/currency-store";
 import { setTheme, useTheme } from "@/lib/theme";
+import { CurrencyList } from "./CurrencyMenu";
 
 /** Account links plus the demo-user switcher; rendered in a popover (desktop) or sheet (mobile). */
 export function AccountMenuContent({ onNavigate }: { onNavigate: () => void }) {
@@ -13,6 +17,8 @@ export function AccountMenuContent({ onNavigate }: { onNavigate: () => void }) {
   const isHost = user?.role === "HOST";
   const theme = useTheme();
   const dark = theme === "dark";
+  const currency = useCurrency();
+  const [currencyOpen, setCurrencyOpen] = useState(false);
 
   const item =
     "flex items-center gap-3 rounded-xl px-4 py-3 text-[15px] font-medium transition hover:bg-surface";
@@ -50,6 +56,23 @@ export function AccountMenuContent({ onNavigate }: { onNavigate: () => void }) {
         </Link>
       </nav>
       <div className="mx-4 my-2 h-px bg-line" />
+      {/* phones: the header has no room for the currency button, so it lives here */}
+      <div className="md:hidden">
+        <button
+          type="button"
+          aria-expanded={currencyOpen}
+          onClick={() => setCurrencyOpen((o) => !o)}
+          className={cn(item, "w-full")}
+        >
+          <Coins className="size-5" />
+          Currency
+          <span className="ml-auto flex items-center gap-1.5 text-sm text-muted">
+            {currencySymbol(currency)} {currency}
+            <ChevronDown className={cn("size-4 transition-transform duration-200", currencyOpen && "rotate-180")} />
+          </span>
+        </button>
+        {currencyOpen && <CurrencyList className="mx-2 mb-2 animate-fade-in rounded-2xl border border-line" onPick={() => setCurrencyOpen(false)} />}
+      </div>
       <button
         type="button"
         role="switch"

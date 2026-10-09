@@ -13,6 +13,8 @@ class CouponValidateIn(BaseModel):
     check_out: str | None = None
     # Optional: validate against a specific subtotal instead of listing + dates
     subtotal: int | None = Field(default=None, ge=0)
+    # Currency of `subtotal` and of the returned amounts (default: the listing's currency, else USD)
+    currency: str | None = Field(default=None, max_length=8)
 
 
 class CouponValidateOut(BaseModel):
@@ -20,6 +22,7 @@ class CouponValidateOut(BaseModel):
     valid: bool
     message: str
     discount: int = 0
+    currency: str | None = None
     description: str | None = None
     pricing: PriceBreakdown | None = None
 
@@ -52,3 +55,5 @@ class HostSummary(BaseModel):
     booking_count: int
     upcoming_booking_count: int
     earnings: int
+    #: Currency of `earnings` (bookings in other currencies are converted with the demo rates).
+    currency: str

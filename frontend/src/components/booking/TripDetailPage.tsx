@@ -4,7 +4,9 @@ import { ArrowLeft, CalendarCheck, CircleAlert, MapPin, Printer } from "lucide-r
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { MessageHost } from "@/components/listing/MessageHost";
 import { PriceRows } from "@/components/listing/PriceRows";
+import { BookingReceipt } from "./BookingReceipt";
 import { Alert } from "@/components/ui/Alert";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -52,6 +54,7 @@ export function TripDetailPage() {
 
 function TripView({ booking, celebrate, onChange }: { booking: Booking; celebrate: boolean; onChange: (b: Booking) => void }) {
   const toast = useToast();
+  const { user } = useApp();
   const { listing } = booking;
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -71,7 +74,8 @@ function TripView({ booking, celebrate, onChange }: { booking: Booking; celebrat
   };
 
   return (
-    <div className="container-narrow pb-24 pt-8 md:pb-16">
+    <>
+    <div className="container-narrow pb-24 pt-8 md:pb-16 print:hidden">
       <Link href="/trips" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold hover:underline">
         <ArrowLeft className="size-4" /> All trips
       </Link>
@@ -91,8 +95,12 @@ function TripView({ booking, celebrate, onChange }: { booking: Booking; celebrat
             Booking reference <strong className="font-semibold tracking-wide">{booking.reference}</strong>
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <ButtonLink href="/trips" variant="dark">Go to my trips</ButtonLink>
-            <ButtonLink href="/" variant="secondary">Keep exploring</ButtonLink>
+            <ButtonLink href="/trips" variant="dark">View my trips</ButtonLink>
+            {!isHostView && <MessageHost listing={listing} className="h-11 px-5 text-[15px]" />}
+            <Button variant="secondary" icon={<Printer className="size-4" />} onClick={() => window.print()}>
+              Print booking / Save as PDF
+            </Button>
+            <ButtonLink href="/" variant="ghost">Keep exploring</ButtonLink>
           </div>
         </div>
       )}
@@ -117,7 +125,7 @@ function TripView({ booking, celebrate, onChange }: { booking: Booking; celebrat
           {booking.status === "CANCELLED" && (
             <Alert tone="error" className="mb-6">
               This booking was cancelled
-              {booking.payment?.status === "REFUNDED" ? ` and ${formatMoney(booking.total)} was refunded.` : "."} The dates are open for other guests.
+              {booking.payment?.status === "REFUNDED" ? ` and ${formatMoney(booking.total, booking.currency)} was refunded.` : "."} The dates are open for other guests.
             </Alert>
           )}
 
@@ -163,7 +171,9 @@ function TripView({ booking, celebrate, onChange }: { booking: Booking; celebrat
           <div className="mt-6 flex flex-wrap gap-3">
             <ButtonLink href={`/listings/${listing.id}`} variant="secondary">View listing</ButtonLink>
             {booking.can_review && <ButtonLink href={`/listings/${listing.id}#reviews`} variant="secondary">Write a review</ButtonLink>}
-            <Button variant="ghost" icon={<Printer className="size-4" />} onClick={() => window.print()}>Print</Button>
+            <Button variant="ghost" icon={<Printer className="size-4" />} onClick={() => window.print()}>
+              Print booking / Save as PDF
+            </Button>
             {booking.can_cancel && <Button variant="danger" onClick={() => setCancelOpen(true)}>Cancel booking</Button>}
           </div>
           {booking.can_cancel && (
@@ -177,7 +187,7 @@ function TripView({ booking, celebrate, onChange }: { booking: Booking; celebrat
             <PriceRows
               pricing={{ ...booking, nightly_price: Math.round(booking.subtotal / booking.nights) }}
               couponCode={booking.coupon_code}
-              totalLabel={booking.payment?.status === "REFUNDED" ? "Total (refunded)" : "Total (USD)"}
+              totalLabel={booking.payment?.status === "REFUNDED" ? "Total (refunded)" : undefined}
             />
             {booking.payment && (
               <div className="mt-5 flex items-center justify-between border-t border-line pt-4 text-sm">
@@ -190,8 +200,10 @@ function TripView({ booking, celebrate, onChange }: { booking: Booking; celebrat
       </div>
 
       <ConfirmDialog open={cancelOpen} title="Cancel this trip?" confirmLabel="Yes, cancel trip" loading={cancelling} onConfirm={cancel} onClose={() => setCancelOpen(false)}>
-        You&apos;ll receive a full refund of {formatMoney(booking.total)} and the dates will open up for other guests.
+        You&apos;ll receive a full refund of {formatMoney(booking.total, booking.currency)} and the dates will open up for other guests.
       </ConfirmDialog>
     </div>
+    <BookingReceipt booking={booking} guestEmail={isHostView ? booking.guest_email : user?.email} />
+    </>
   );
 }

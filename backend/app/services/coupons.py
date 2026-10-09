@@ -4,6 +4,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.currency import BASE_CURRENCY, convert, format_money
 from app.models import Booking, Coupon, CouponType, CouponUsage
 from app.models.base import utcnow
 
@@ -20,8 +21,15 @@ def find_coupon(db: Session, code: str) -> Coupon | None:
     return db.scalar(select(Coupon).where(Coupon.code == normalize_code(code)))
 
 
-def evaluate_coupon(coupon: Coupon | None, subtotal: int, now: datetime | None = None) -> int:
-    """Validate a coupon against a stay subtotal and return the discount in whole dollars."""
+def evaluate_coupon(
+    coupon: Coupon | None, subtotal: int, now: datetime | None = None, currency: str = BASE_CURRENCY
+) -> int:
+    """Validate a coupon against a stay subtotal and return the discount in whole units of `currency`.
+
+    Coupon money (`minimum_amount`, `maximum_discount`, flat `value`) is defined in the canonical
+    currency (USD). For a stay priced in another currency those figures are converted with the server's
+    rates, then compared and capped in the stay's own currency, so "$500 off" is never read as "500 rupees".
+    """
     now = now or utcnow()
     if coupon is None:
         raise CouponRejected("That coupon code isn't valid.")
@@ -31,19 +39,20 @@ def evaluate_coupon(coupon: Coupon | None, subtotal: int, now: datetime | None =
         raise CouponRejected(f"This coupon expired on {coupon.expires_at:%b %d, %Y}.")
     if coupon.usage_limit is not None and coupon.usage_count >= coupon.usage_limit:
         raise CouponRejected("This coupon has reached its usage limit.")
-    if subtotal < coupon.minimum_amount:
+    minimum = convert(coupon.minimum_amount, BASE_CURRENCY, currency)
+    if subtotal < minimum:
         raise CouponRejected(
-            f"This coupon needs a stay subtotal of at least ${coupon.minimum_amount} "
-            f"(yours is ${subtotal})."
+            f"This coupon needs a stay subtotal of at least {format_money(minimum, currency)} "
+            f"(yours is {format_money(subtotal, currency)})."
         )
 
     if coupon.type == CouponType.PERCENTAGE:
         raw = (Decimal(subtotal) * coupon.value / 100).quantize(Decimal(1), ROUND_HALF_UP)
         discount = int(raw)
     else:
-        discount = coupon.value
+        discount = convert(coupon.value, BASE_CURRENCY, currency)
     if coupon.maximum_discount is not None:
-        discount = min(discount, coupon.maximum_discount)
+        discount = min(discount, convert(coupon.maximum_discount, BASE_CURRENCY, currency))
     return max(0, min(discount, subtotal))  # a coupon can never make the stay cost less than free
 
 

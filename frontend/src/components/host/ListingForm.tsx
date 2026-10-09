@@ -8,6 +8,8 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Counter } from "@/components/ui/Counter";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { Img } from "@/components/ui/Img";
+import { useApp } from "@/context/AppProvider";
+import { currencySymbol } from "@/lib/currency";
 import { useToast } from "@/components/ui/Toast";
 import { useFetch } from "@/hooks/useFetch";
 import {
@@ -97,7 +99,7 @@ const fromListing = (l: ListingDetail): FormState => ({
 
 type Errors = Partial<Record<string, string>>;
 
-function validate(form: FormState): Errors {
+function validate(form: FormState, currency: string): Errors {
   const errors: Errors = {};
   if (form.title.trim().length < 5) errors.title = "Give your listing a title of at least 5 characters.";
   if (form.description.trim().length < 20) errors.description = "Describe your place in at least 20 characters.";
@@ -105,7 +107,7 @@ function validate(form: FormState): Errors {
   if (form.city.trim().length < 2) errors.city = "City is required.";
   if (form.country.trim().length < 2) errors.country = "Country is required.";
   const price = Number(form.nightly_price);
-  if (!form.nightly_price || !Number.isFinite(price) || price < 10) errors.nightly_price = "Nightly price must be at least $10.";
+  if (!form.nightly_price || !Number.isFinite(price) || price < 10) errors.nightly_price = `Enter a nightly price in ${currency} (at least 10).`;
   for (const key of ["cleaning_fee", "service_fee"] as const) {
     const value = Number(form[key]);
     if (!Number.isFinite(value) || value < 0) errors[key] = "Enter 0 or more.";
@@ -148,11 +150,16 @@ export function ListingForm({ listing }: { listing?: ListingDetail }) {
   const toast = useToast();
   const editing = Boolean(listing);
   const meta = useFetch((signal) => listingsApi.meta({ signal }), []);
+  const { currencyTable } = useApp();
   const [form, setForm] = useState<FormState>(() => (listing ? fromListing(listing) : EMPTY));
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [customAmenity, setCustomAmenity] = useState("");
+  // Prices are entered in the currency of the listing's country (the server derives it the same way).
+  const pricingCurrency =
+    currencyTable?.country_currency[form.country.trim().toLowerCase()] ?? (listing?.native_currency ?? "USD");
+  const currencyName = currencyTable?.currencies.find((c) => c.code === pricingCurrency)?.name ?? pricingCurrency;
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -178,7 +185,7 @@ export function ListingForm({ listing }: { listing?: ListingDetail }) {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
-    const found = validate(form);
+    const found = validate(form, pricingCurrency);
     setErrors(found);
     if (Object.keys(found).length) {
       setFormError("Please fix the highlighted fields.");
@@ -270,15 +277,18 @@ export function ListingForm({ listing }: { listing?: ListingDetail }) {
         </div>
       </Section>
 
-      <Section title="Pricing" description="All amounts are in US dollars. Fees are charged once per stay.">
+      <Section
+        title="Pricing"
+        description={`Amounts are in ${currencyName} (${pricingCurrency}), chosen automatically from the country above. Fees are charged once per stay. Guests can view them in any currency.`}
+      >
         <div className="grid gap-5 sm:grid-cols-3">
-          <Field label="Nightly price" htmlFor="nightly_price" error={errors.nightly_price}>
+          <Field label={`Nightly price (${currencySymbol(pricingCurrency)} ${pricingCurrency})`} htmlFor="nightly_price" error={errors.nightly_price}>
             <Input id="nightly_price" type="number" min={10} inputMode="numeric" value={form.nightly_price} invalid={!!errors.nightly_price} onChange={(e) => set("nightly_price", e.target.value)} placeholder="150" />
           </Field>
-          <Field label="Cleaning fee" htmlFor="cleaning_fee" error={errors.cleaning_fee}>
+          <Field label={`Cleaning fee (${pricingCurrency})`} htmlFor="cleaning_fee" error={errors.cleaning_fee}>
             <Input id="cleaning_fee" type="number" min={0} inputMode="numeric" value={form.cleaning_fee} invalid={!!errors.cleaning_fee} onChange={(e) => set("cleaning_fee", e.target.value)} />
           </Field>
-          <Field label="Service fee" htmlFor="service_fee" error={errors.service_fee}>
+          <Field label={`Service fee (${pricingCurrency})`} htmlFor="service_fee" error={errors.service_fee}>
             <Input id="service_fee" type="number" min={0} inputMode="numeric" value={form.service_fee} invalid={!!errors.service_fee} onChange={(e) => set("service_fee", e.target.value)} />
           </Field>
         </div>

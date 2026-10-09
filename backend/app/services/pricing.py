@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from app.core.config import get_settings
+from app.core.currency import convert
 from app.core.errors import bad_request
 from app.models import Listing
 from app.models.base import utcnow
@@ -11,6 +12,8 @@ from app.models.base import utcnow
 
 @dataclass(frozen=True)
 class Pricing:
+    """A stay's price breakdown; every amount is whole units of `currency`."""
+
     nights: int
     nightly_price: int
     subtotal: int
@@ -18,6 +21,7 @@ class Pricing:
     service_fee: int
     discount: int
     total: int
+    currency: str
 
 
 def validate_stay_dates(check_in: date, check_out: date, today: date | None = None) -> int:
@@ -45,17 +49,27 @@ def validate_guests(listing: Listing, guests: int) -> None:
         )
 
 
-def build_pricing(listing: Listing, nights: int, discount: int = 0) -> Pricing:
-    """total = subtotal + cleaning fee + service fee - discount (whole dollars, never negative)."""
-    subtotal = listing.nightly_price * nights
+def build_pricing(listing: Listing, nights: int, discount: int = 0, currency: str | None = None) -> Pricing:
+    """Price a stay in `currency` (default: the listing's own currency).
+
+    The nightly rate and the two flat fees are converted individually with the server's rate table
+    (`core.currency.convert`), then `subtotal = nightly * nights` and
+    `total = subtotal + cleaning + service - discount`, so the breakdown always adds up exactly.
+    `discount` must already be expressed in `currency`; it can never exceed the subtotal.
+    """
+    currency = currency or listing.currency
+    nightly = convert(listing.nightly_price, listing.currency, currency)
+    cleaning = convert(listing.cleaning_fee, listing.currency, currency)
+    service = convert(listing.service_fee, listing.currency, currency)
+    subtotal = nightly * nights
     discount = max(0, min(discount, subtotal))
-    total = subtotal + listing.cleaning_fee + listing.service_fee - discount
     return Pricing(
         nights=nights,
-        nightly_price=listing.nightly_price,
+        nightly_price=nightly,
         subtotal=subtotal,
-        cleaning_fee=listing.cleaning_fee,
-        service_fee=listing.service_fee,
+        cleaning_fee=cleaning,
+        service_fee=service,
         discount=discount,
-        total=total,
+        total=subtotal + cleaning + service - discount,
+        currency=currency,
     )

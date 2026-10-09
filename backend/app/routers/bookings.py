@@ -45,6 +45,7 @@ def booking_to_out(booking: Booking, viewer: User, reviewed: set[int] | None = N
         service_fee=booking.service_fee,
         discount=booking.discount,
         total=booking.total,
+        currency=booking.currency,
         coupon_code=booking.coupon_code,
         hold_expires_at=booking.hold_expires_at,
         created_at=booking.created_at,
@@ -81,10 +82,11 @@ def quote(
     check_out: date,
     guests: Annotated[int, Query(ge=1, le=64)] = 1,
     coupon_code: str | None = None,
+    currency: Annotated[str | None, Query(description="Price in this currency (default: listing's)")] = None,
 ):
     """Authoritative price + bookability preview used by the booking card."""
     svc.housekeeping(db)
-    return svc.quote_stay(db, user, listing_id, check_in, check_out, guests, coupon_code)
+    return svc.quote_stay(db, user, listing_id, check_in, check_out, guests, coupon_code, currency)
 
 
 @router.post("/bookings", response_model=BookingOut, status_code=201)

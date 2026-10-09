@@ -5,15 +5,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/cn";
-import { parseQuick, QUICK_FILTERS, type QuickFilterId } from "@/lib/quick-filters";
+import { useApp } from "@/context/AppProvider";
+import { useCurrency } from "@/lib/currency-store";
+import { parseQuick, quickLabel, type QuickFilterId } from "@/lib/quick-filters";
 
 type TabId = "all" | QuickFilterId;
 
-const TABS: { id: TabId; label: string; Icon: LucideIcon }[] = [
-  { id: "all", label: "All", Icon: LayoutGrid },
-  { id: "homes", label: QUICK_FILTERS.homes.label, Icon: House },
-  { id: "top-rated", label: QUICK_FILTERS["top-rated"].label, Icon: Star },
-  { id: "budget", label: QUICK_FILTERS.budget.label, Icon: BadgeDollarSign },
+const TABS: { id: TabId; Icon: LucideIcon }[] = [
+  { id: "all", Icon: LayoutGrid },
+  { id: "homes", Icon: House },
+  { id: "top-rated", Icon: Star },
+  { id: "budget", Icon: BadgeDollarSign },
 ];
 
 /**
@@ -33,6 +35,10 @@ function Tabs({ className, compact }: { className?: string; compact?: boolean })
   const router = useRouter();
   const params = useSearchParams();
   const selected: TabId = parseQuick(params.get("quick")) ?? "all";
+  const currency = useCurrency();
+  const { rates } = useApp();
+  // "Under ₹13,000" / "Under $150": the budget threshold follows the display currency.
+  const labelFor = (id: TabId) => (id === "all" ? "All" : quickLabel(id, { currency, rates }, true));
 
   const choose = (id: TabId) => {
     const next = new URLSearchParams(params.toString());
@@ -49,7 +55,7 @@ function Tabs({ className, compact }: { className?: string; compact?: boolean })
       aria-label="Quick filters"
       className={cn("flex items-center", compact ? "gap-4" : "gap-1", className)}
     >
-      {TABS.map(({ id, label, Icon }) => {
+      {TABS.map(({ id, Icon }) => {
         const active = selected === id;
         return (
           <button
@@ -60,12 +66,12 @@ function Tabs({ className, compact }: { className?: string; compact?: boolean })
             onClick={() => choose(id)}
             className={cn(
               "relative flex h-11 items-center gap-2 whitespace-nowrap rounded-full text-sm transition-colors duration-150",
-              compact ? "px-0.5" : "px-4 hover:bg-black/5",
+              compact ? "px-0.5" : "px-3 hover:bg-black/5 lg:px-4",
               active ? "font-semibold text-ink" : "font-medium text-muted hover:text-ink",
             )}
           >
             <Icon className={cn(compact ? "size-4" : "size-[18px]")} strokeWidth={active ? 2.2 : 1.8} aria-hidden="true" />
-            {label}
+            {labelFor(id)}
             <span
               aria-hidden="true"
               className={cn(

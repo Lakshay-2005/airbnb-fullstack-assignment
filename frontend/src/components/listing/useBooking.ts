@@ -13,6 +13,7 @@ import {
   listingsApi,
   type ListingDetail,
 } from "@/lib/api";
+import { useCurrency } from "@/lib/currency-store";
 import { isValidRange, todayISO } from "@/lib/dates";
 
 interface Initial {
@@ -26,6 +27,7 @@ export function useBooking(listing: ListingDetail, initial: Initial) {
   const router = useRouter();
   const toast = useToast();
   const { user } = useApp();
+  const currency = useCurrency(); // the booking is priced and stored in the guest's display currency
 
   const validInitial =
     initial.checkIn && initial.checkOut && initial.checkIn >= todayISO() && isValidRange(initial.checkIn, initial.checkOut);
@@ -55,10 +57,10 @@ export function useBooking(listing: ListingDetail, initial: Initial) {
     (signal) =>
       bookingsApi.quote(
         listing.id,
-        { check_in: checkIn!, check_out: checkOut!, guests, coupon_code: couponCode || undefined },
+        { check_in: checkIn!, check_out: checkOut!, guests, coupon_code: couponCode || undefined, currency },
         { signal },
       ),
-    [queryKey, user?.id],
+    [queryKey, user?.id, currency],
     rangeReady && !overCapacity,
   );
 
@@ -98,6 +100,7 @@ export function useBooking(listing: ListingDetail, initial: Initial) {
         check_out: checkOut,
         guests,
         coupon_code: quoteData?.coupon?.valid ? couponCode : null,
+        currency,
       });
       router.push(`/checkout/${booking.id}`);
     } catch (error) {

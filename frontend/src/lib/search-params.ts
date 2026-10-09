@@ -20,6 +20,8 @@ export function filtersFromParams(params: URLSearchParams): SearchFilters {
     guests: num(params.get("guests")),
     min_price: num(params.get("min_price")),
     max_price: num(params.get("max_price")),
+    // The price bounds above were chosen in this currency (default: whatever is displayed).
+    price_currency: params.get("cur") || undefined,
     property_type: list(params.get("property_type")),
     category: params.get("category") || undefined,
     amenities: list(params.get("amenities")),
@@ -36,6 +38,11 @@ export function filtersToParams(filters: SearchFilters): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined || value === null || value === "") continue;
+    if (key === "price_currency") {
+      // Only meaningful alongside a price bound; stored as ?cur=INR so shared URLs stay unambiguous.
+      if (filters.min_price !== undefined || filters.max_price !== undefined) params.set("cur", String(value));
+      continue;
+    }
     if (Array.isArray(value)) {
       if (value.length) params.set(key, value.join(","));
     } else if (key === "page" && value === 1) {
@@ -62,6 +69,7 @@ export function activeFilterCount(f: SearchFilters): number {
 export const FILTER_KEYS: (keyof SearchFilters)[] = [
   "min_price",
   "max_price",
+  "price_currency",
   "property_type",
   "amenities",
   "min_rating",

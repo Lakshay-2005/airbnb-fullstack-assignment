@@ -125,12 +125,12 @@ export function ListingCard({ listing, carryQuery, priority }: ListingCardProps)
         <p className="mt-1 text-[15px] leading-snug">
           {listing.stay ? (
             <>
-              <span className="font-semibold">{formatMoney(listing.stay.total)}</span>
+              <span className="font-semibold">{formatMoney(listing.stay.total, listing.currency)}</span>
               <span className="text-muted"> total · {plural(listing.stay.nights, "night")}</span>
             </>
           ) : (
             <>
-              <span className="font-semibold">{formatMoney(listing.nightly_price)}</span>
+              <span className="font-semibold">{formatMoney(listing.nightly_price, listing.currency)}</span>
               <span className="text-muted"> night</span>
             </>
           )}

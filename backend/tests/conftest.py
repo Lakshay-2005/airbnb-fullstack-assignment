@@ -64,9 +64,10 @@ def other_host(api):
 
 
 # Seed layout the tests rely on: listing 1 is host@example.com's Goa villa (capacity 8,
-# $240/night, $60 cleaning, $45 service); listing 7 belongs to another host.
+# ₹19,500/night, ₹3,500 cleaning, ₹2,500 service, priced in INR); listing 7 belongs to another host.
 VILLA = 1
-VILLA_NIGHTLY, VILLA_CLEANING, VILLA_SERVICE = 240, 60, 45
+VILLA_NIGHTLY, VILLA_CLEANING, VILLA_SERVICE = 19_500, 3_500, 2_500
+VILLA_CURRENCY = "INR"
 
 
 def booking_payload(listing_id=VILLA, check_in=100, check_out=104, guests=2, **extra):

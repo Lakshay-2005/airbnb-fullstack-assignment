@@ -11,7 +11,7 @@ def test_listing_retrieval(client):
     assert detail.status_code == 200
     body = detail.json()
     assert body["title"] and len(body["images"]) >= 3 and body["amenities"]
-    assert body["host"]["name"] and body["cleaning_fee"] == 60
+    assert body["host"]["name"] and body["cleaning_fee"] == 3500 and body["currency"] == "INR"
 
 
 def test_listing_not_found(client):
@@ -40,11 +40,12 @@ def test_location_search(client):
 
 
 def test_filters(client):
-    cheap = client.get("/api/listings?max_price=120&page_size=48").json()["items"]
-    assert cheap and all(i["nightly_price"] <= 120 for i in cheap)
+    # prices and price filters are in the display currency (INR unless asked otherwise)
+    cheap = client.get("/api/listings?max_price=8000&page_size=48").json()["items"]
+    assert cheap and all(i["nightly_price"] <= 8000 and i["currency"] == "INR" for i in cheap)
 
-    ranged = client.get("/api/listings?min_price=200&max_price=300&page_size=48").json()["items"]
-    assert ranged and all(200 <= i["nightly_price"] <= 300 for i in ranged)
+    ranged = client.get("/api/listings?min_price=15000&max_price=25000&page_size=48").json()["items"]
+    assert ranged and all(15000 <= i["nightly_price"] <= 25000 for i in ranged)
 
     cabins = client.get("/api/listings?property_type=Cabin&page_size=48").json()["items"]
     assert cabins and {i["property_type"] for i in cabins} == {"Cabin"}
@@ -83,6 +84,7 @@ def test_invalid_search_inputs(client):
     assert client.get(f"/api/listings?check_in={day(10)}&check_out={day(5)}").status_code == 400
     assert client.get(f"/api/listings?check_in={day(10)}").status_code == 400
     assert client.get("/api/listings?min_price=500&max_price=100").status_code == 400
+    assert client.get("/api/listings?currency=XYZ").status_code == 400
     assert client.get("/api/listings?page=0").status_code == 422
 
 
@@ -101,7 +103,8 @@ def test_search_excludes_unavailable_listings(client, api, guest):
 def test_stay_total_in_search_results(client):
     items = client.get(f"/api/listings?check_in={day(200)}&check_out={day(204)}&page_size=48").json()["items"]
     item = next(i for i in items if i["id"] == 1)
-    assert item["stay"] == {"nights": 4, "total": 240 * 4 + 60 + 45}
+    assert item["currency"] == "INR"
+    assert item["stay"] == {"nights": 4, "total": 19_500 * 4 + 3_500 + 2_500}
 
 
 def test_meta_and_destinations(client):

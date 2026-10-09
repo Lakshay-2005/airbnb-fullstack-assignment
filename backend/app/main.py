@@ -8,7 +8,7 @@ from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.db.database import SessionLocal, init_db
 from app.models import User
-from app.routers import bookings, coupons, favorites, host, listings, messages, reviews, users
+from app.routers import bookings, coupons, currencies, favorites, host, listings, messages, reviews, users
 
 
 @asynccontextmanager
@@ -43,7 +43,7 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
 
     api = APIRouter(prefix="/api")
-    for module in (users, listings, bookings, favorites, coupons, reviews, host, messages):
+    for module in (users, listings, bookings, favorites, coupons, reviews, host, messages, currencies):
         api.include_router(module.router)
 
     @api.get("/health", tags=["meta"])

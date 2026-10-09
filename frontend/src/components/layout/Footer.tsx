@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export function Footer() {
   return (
-    <footer className="mt-auto border-t border-line bg-surface pb-24 md:pb-0">
+    <footer className="mt-auto border-t border-line bg-surface pb-24 md:pb-0 print:hidden">
       <div className="container-page flex flex-col gap-3 py-8 text-sm text-muted md:flex-row md:items-center md:justify-between">
         <p>
           Airbnb Clone · An independent educational project, not affiliated with or endorsed by

@@ -144,7 +144,7 @@ export function TripsPage() {
           <>
             You&apos;re cancelling <strong>{toCancel.listing.title}</strong> ({formatRange(toCancel.check_in, toCancel.check_out)}).
             {toCancel.payment?.status === "SUCCESS"
-              ? ` You'll get a full refund of ${formatMoney(toCancel.total)} and the dates will open up again.`
+              ? ` You'll get a full refund of ${formatMoney(toCancel.total, toCancel.currency)} and the dates will open up again.`
               : " The dates will open up again."}
           </>
         )}
@@ -176,7 +176,7 @@ function TripCard({ booking, onCancel }: { booking: Booking; onCancel: () => voi
           <span className="font-medium">{formatRange(booking.check_in, booking.check_out)}</span>
           <span className="text-muted"> · {plural(booking.nights, "night")} · {plural(booking.guests, "guest")}</span>
         </p>
-        <p className="mt-1 font-semibold">{formatMoney(booking.total)}</p>
+        <p className="mt-1 font-semibold">{formatMoney(booking.total, booking.currency)}</p>
         <div className="mt-4 flex flex-wrap gap-2 sm:mt-auto sm:pt-4">
           {pending ? (
             <ButtonLink size="sm" href={`/checkout/${booking.id}`}>Complete payment</ButtonLink>

@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response
 from sqlalchemy import func, select
 
+from app.core.currency import DEFAULT_DISPLAY_CURRENCY, normalize_currency
 from app.core.errors import bad_request
 from app.models import Amenity, Listing, ListingStatus
 from app.models.base import utcnow
@@ -34,8 +35,8 @@ def search(
     check_in: date | None = None,
     check_out: date | None = None,
     guests: Annotated[int | None, Query(ge=1, le=64)] = None,
-    min_price: Annotated[int | None, Query(ge=0)] = None,
-    max_price: Annotated[int | None, Query(ge=0)] = None,
+    min_price: Annotated[int | None, Query(ge=0, description="Nightly price, in `currency`")] = None,
+    max_price: Annotated[int | None, Query(ge=0, description="Nightly price, in `currency`")] = None,
     property_type: Annotated[str | None, Query(description="Comma-separated")] = None,
     category: str | None = None,
     amenities: Annotated[str | None, Query(description="Comma-separated; all required")] = None,
@@ -43,6 +44,9 @@ def search(
     bedrooms: Annotated[int | None, Query(ge=0)] = None,
     bathrooms: Annotated[int | None, Query(ge=0)] = None,
     sort: str = "recommended",
+    currency: Annotated[
+        str, Query(description="Display currency: prices, price filters and the price sort use it")
+    ] = DEFAULT_DISPLAY_CURRENCY,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=48)] = 12,
 ):
@@ -61,6 +65,7 @@ def search(
         bedrooms=bedrooms,
         bathrooms=bathrooms,
         sort=sort,
+        currency=normalize_currency(currency),
         page=page,
         page_size=page_size,
     )
@@ -68,19 +73,20 @@ def search(
 
 
 @router.get("/meta", response_model=MetaOut)
-def meta(db: DbSession):
-    """Vocabulary for filter UIs: property types, categories, amenities and price bounds."""
+def meta(db: DbSession, currency: str = DEFAULT_DISPLAY_CURRENCY):
+    """Vocabulary for filter UIs: property types, categories, amenities and price bounds (in `currency`)."""
+    currency = normalize_currency(currency)
+    price = svc.display_price(currency)
     low, high = db.execute(
-        select(func.min(Listing.nightly_price), func.max(Listing.nightly_price)).where(
-            Listing.status == ListingStatus.ACTIVE
-        )
+        select(func.min(price), func.max(price)).where(Listing.status == ListingStatus.ACTIVE)
     ).one()
     return MetaOut(
         property_types=svc.PROPERTY_TYPES,
         categories=[{"id": cid, "label": label} for cid, label in svc.CATEGORIES],
         amenities=list(db.scalars(select(Amenity.name).order_by(Amenity.name))),
-        price_min=low or 0,
-        price_max=high or 1000,
+        currency=currency,
+        price_min=int(low or 0),
+        price_max=int(high or 1000),
     )
 
 
@@ -100,8 +106,10 @@ def destinations(db: DbSession, q: str | None = None, limit: Annotated[int, Quer
 
 
 @router.get("/listings/{listing_id}", response_model=ListingDetail)
-def get_listing(listing_id: int, db: DbSession, user: CurrentUser):
-    return svc.to_detail(db, svc.get_listing_for_viewer(db, listing_id, user))
+def get_listing(listing_id: int, db: DbSession, user: CurrentUser, currency: str | None = None):
+    """Prices are converted into `currency`; without it the listing's own (native) currency is used."""
+    shown = normalize_currency(currency) if currency else None
+    return svc.to_detail(db, svc.get_listing_for_viewer(db, listing_id, user), shown)
 
 
 @router.get("/listings/{listing_id}/availability", response_model=AvailabilityOut)

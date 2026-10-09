@@ -14,7 +14,8 @@ class PriceBreakdown(BaseModel):
     service_fee: int
     discount: int
     total: int
-    currency: str = "USD"
+    #: Every amount in this breakdown is whole units of this currency.
+    currency: str
 
 
 class CouponCheck(BaseModel):
@@ -46,6 +47,8 @@ class BookingCreate(BaseModel):
     check_out: date
     guests: int = Field(ge=1, le=64)
     coupon_code: str | None = Field(default=None, max_length=40)
+    #: Currency to price and store the booking in; defaults to the listing's own currency.
+    currency: str | None = Field(default=None, max_length=8)
 
 
 class CouponApply(BaseModel):
@@ -91,7 +94,8 @@ class BookingOut(BaseModel):
     service_fee: int
     discount: int
     total: int
-    currency: str = "USD"
+    #: Currency of every amount on this booking (a snapshot taken when it was created).
+    currency: str
     coupon_code: str | None
     hold_expires_at: datetime | None
     created_at: datetime

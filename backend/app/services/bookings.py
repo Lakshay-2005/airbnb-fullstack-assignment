@@ -13,6 +13,7 @@ from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.currency import format_money, normalize_currency
 from app.core.errors import AppError, bad_request, conflict, forbidden, not_found
 from app.db.database import write_session
 from app.models import (
@@ -106,7 +107,7 @@ def _bookable_listing(db: Session, listing_id: int) -> Listing:
 
 
 def _price_stay(
-    db: Session, listing: Listing, payload_dates, guests: int, coupon_code: str | None
+    db: Session, listing: Listing, payload_dates, guests: int, coupon_code: str | None, currency: str
 ) -> tuple[Pricing, str | None, CouponCheck | None]:
     """Validate a stay and price it. Raises AppError for hard failures; a bad coupon is
     returned as a CouponCheck so a quote can still show the undiscounted price."""
@@ -120,36 +121,44 @@ def _price_stay(
     if coupon_code and coupon_code.strip():
         code = normalize_code(coupon_code)
         coupon = find_coupon(db, code)
-        subtotal = listing.nightly_price * nights
+        subtotal = build_pricing(listing, nights, currency=currency).subtotal
         try:
-            discount = evaluate_coupon(coupon, subtotal)
+            discount = evaluate_coupon(coupon, subtotal, currency=currency)
             applied_code = code
             check = CouponCheck(
                 code=code,
                 valid=True,
-                message=f"Coupon applied: you save ${discount}.",
+                message=f"Coupon applied: you save {format_money(discount, currency)}.",
                 discount=discount,
                 description=coupon.description if coupon else None,
             )
         except CouponRejected as exc:
             check = CouponCheck(code=code, valid=False, message=str(exc))
-    return build_pricing(listing, nights, discount), applied_code, check
+    return build_pricing(listing, nights, discount, currency), applied_code, check
 
 
 def quote_stay(
-    db: Session, user: User, listing_id: int, check_in, check_out, guests: int, coupon_code
+    db: Session,
+    user: User,
+    listing_id: int,
+    check_in,
+    check_out,
+    guests: int,
+    coupon_code,
+    currency: str | None = None,
 ) -> QuoteOut:
     listing = _bookable_listing(db, listing_id)
+    currency = normalize_currency(currency, default=listing.currency)
     try:
         if listing.host_id == user.id:
             raise forbidden("You can't book your own listing.", "own_listing")
-        pricing, _, check = _price_stay(db, listing, (check_in, check_out), guests, coupon_code)
+        pricing, _, check = _price_stay(db, listing, (check_in, check_out), guests, coupon_code, currency)
     except AppError as exc:
         return QuoteOut(listing_id=listing_id, bookable=False, message=exc.detail, code=exc.code)
     return QuoteOut(
         listing_id=listing_id,
         bookable=True,
-        pricing=PriceBreakdown(**pricing.__dict__, currency=get_settings().currency),
+        pricing=PriceBreakdown(**pricing.__dict__),
         coupon=check,
     )
 
@@ -173,8 +182,9 @@ def create_booking(db: Session, user: User, data: BookingCreate) -> Booking:
         if listing.host_id == user.id:
             raise forbidden("You can't book your own listing.", "own_listing")
 
+        currency = normalize_currency(data.currency, default=listing.currency)
         pricing, applied_code, check = _price_stay(
-            s, listing, (data.check_in, data.check_out), data.guests, data.coupon_code
+            s, listing, (data.check_in, data.check_out), data.guests, data.coupon_code, currency
         )
         if check is not None and not check.valid:
             raise bad_request(f"Invalid coupon: {check.message}", "invalid_coupon")
@@ -187,6 +197,7 @@ def create_booking(db: Session, user: User, data: BookingCreate) -> Booking:
             check_out=data.check_out,
             guests=data.guests,
             nights=pricing.nights,
+            currency=pricing.currency,  # snapshot: every amount below is in this currency
             subtotal=pricing.subtotal,
             cleaning_fee=pricing.cleaning_fee,
             service_fee=pricing.service_fee,
@@ -271,7 +282,7 @@ def apply_coupon_to_booking(db: Session, user: User, booking_id: int, code: str 
         if code and code.strip():
             coupon = find_coupon(s, code)
             try:
-                discount = evaluate_coupon(coupon, booking.subtotal)
+                discount = evaluate_coupon(coupon, booking.subtotal, currency=booking.currency)
             except CouponRejected as exc:
                 raise bad_request(f"Invalid coupon: {exc}", "invalid_coupon") from exc
             applied = coupon.code

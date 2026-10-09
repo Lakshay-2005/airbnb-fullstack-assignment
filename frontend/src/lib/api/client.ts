@@ -1,3 +1,5 @@
+import { getCurrency } from "@/lib/currency-store";
+
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const TOKEN_KEY = "airbnb-clone.session";
 
@@ -36,6 +38,9 @@ export function setToken(token: string | null): void {
   }
 }
 
+/** GET endpoints whose responses carry prices (or price bounds) in the requested display currency. */
+const DISPLAY_PRICE_PATHS = /^\/(listings(\/\d+)?|meta|favorites|host\/(listings|summary))$/;
+
 type Query = Record<string, string | number | boolean | string[] | null | undefined>;
 
 interface RequestOptions {
@@ -43,6 +48,8 @@ interface RequestOptions {
   query?: Query;
   body?: unknown;
   signal?: AbortSignal;
+  /** Skip the automatic display-currency parameter: prices come back in the listing's own currency. */
+  native?: boolean;
 }
 
 function toQueryString(query: Query = {}): string {
@@ -60,7 +67,12 @@ function toQueryString(query: Query = {}): string {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", query, body, signal } = options;
+  const { method = "GET", body, signal, native } = options;
+  let { query } = options;
+  // Every price a guest sees is converted by the server into their display currency.
+  if (method === "GET" && !native && DISPLAY_PRICE_PATHS.test(path) && query?.currency === undefined) {
+    query = { ...query, currency: getCurrency() };
+  }
   const headers: Record<string, string> = { Accept: "application/json" };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;

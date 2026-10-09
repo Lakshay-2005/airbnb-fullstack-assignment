@@ -25,7 +25,7 @@ export function useSearch() {
     (values: SearchValues) => {
       // Keep category/filters/sort when the guest refines their search, but restart pagination.
       const next = new URLSearchParams();
-      for (const key of ["category", "min_price", "max_price", "property_type", "amenities", "min_rating", "bedrooms", "bathrooms", "sort", "quick"]) {
+      for (const key of ["category", "min_price", "max_price", "cur", "property_type", "amenities", "min_rating", "bedrooms", "bathrooms", "sort", "quick"]) {
         const value = params.get(key);
         if (value) next.set(key, value);
       }
